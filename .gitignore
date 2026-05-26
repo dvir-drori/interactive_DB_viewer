@@ -1,0 +1,9 @@
+# Patient data & generated files
+*.csv
+*.db
+*.fasta
+*.fai
+*.gff
+bedgraphs_by_label/
+beds_by_label/
+igv_export/
