@@ -30,7 +30,7 @@ function NavItem({ to, label }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/+$/, '')}>
       {/* ── Top navigation bar ── */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-lab-panel border-b border-lab-border h-12 flex items-center px-6 gap-6">
         <span className="text-lab-accent font-semibold text-sm tracking-wide mr-4">
