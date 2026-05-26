@@ -21,8 +21,13 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # Database file path — stored next to the backend scripts
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH  = os.path.join(BASE_DIR, "nir_lab.db")
+# On Render: store DB on persistent disk at /data/ (survives redeploys)
+# Locally:   store next to the backend scripts
+if os.path.isdir("/data"):
+    DB_PATH = "/data/nir_lab.db"
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB_PATH  = os.path.join(BASE_DIR, "nir_lab.db")
 
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 

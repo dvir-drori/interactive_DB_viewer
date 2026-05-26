@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: nir-lab-timeline
+    runtime: python
+    buildCommand: "./build.sh"
+    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: nir-lab-data
+      mountPath: /data
+      sizeGB: 1

@@ -1,13 +1,8 @@
 """
 pipeline/processor.py
 ---------------------
-Core data-processing logic extracted and refactored from FilesGenerator-bedgraph.py.
-
-Responsibilities:
-  1. Parse and validate an uploaded CSV file
-  2. Normalize dates and calculate day offsets (Day 1 = patient's earliest date)
-  3. Upsert patients and measurements into the SQLite database
-  4. Return a structured summary (patient count, row count, errors)
+Core data-processing logic for ingesting CSV files into the database.
+Pure Python + Pandas only — no biopython or pyfaidx required.
 
 CSV expected columns:
   PatientID  : unique patient identifier (string)
@@ -15,8 +10,6 @@ CSV expected columns:
   Label      : name of the measured parameter (e.g. CREATININE, H3K4me3)
   Value      : numeric or categorical measurement value (stored as string)
   Category   : 'Lab Data' | 'Biopsies' | 'Plasma Samples'
-
-All original pipeline logic (date anchoring, category splitting) is preserved exactly.
 """
 
 import json
@@ -33,21 +26,9 @@ VALID_CATEGORIES  = {"Lab Data", "Biopsies", "Plasma Samples"}
 
 def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
     """
-    Main entry point called by the FastAPI upload endpoint.
+    Parse, validate and ingest a CSV file into the database.
 
-    Parameters
-    ----------
-    file_bytes : raw bytes of the uploaded CSV file
-    filename   : original filename (for audit log)
-    db         : active SQLAlchemy database session
-
-    Returns
-    -------
-    dict with keys:
-        patient_count  : number of unique patients ingested
-        row_count      : number of measurement rows successfully stored
-        errors         : list of human-readable error/warning strings
-        status         : 'ok' | 'partial' | 'error'
+    Returns dict with: patient_count, row_count, errors, status
     """
     errors = []
 
@@ -57,7 +38,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
     try:
         df = pd.read_csv(
             pd.io.common.BytesIO(file_bytes),
-            dtype=str,          # keep everything as string initially
+            dtype=str,
             encoding="utf-8",
         )
     except Exception as exc:
@@ -74,7 +55,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
     # Step 3: Normalize dates
     # ------------------------------------------------------------------ #
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    bad_dates = df["Date"].isna().sum()
+    bad_dates  = df["Date"].isna().sum()
     if bad_dates > 0:
         errors.append(f"{bad_dates} rows had unparseable dates and were skipped.")
     df = df.dropna(subset=["Date", "PatientID"])
@@ -83,7 +64,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
         return _fail(filename, db, "No valid rows remain after date parsing.")
 
     # ------------------------------------------------------------------ #
-    # Step 4: Validate categories
+    # Step 4: Warn on unknown categories (keep rows)
     # ------------------------------------------------------------------ #
     unknown_cats = set(df["Category"].dropna().unique()) - VALID_CATEGORIES
     if unknown_cats:
@@ -91,7 +72,6 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
 
     # ------------------------------------------------------------------ #
     # Step 5: Calculate day offsets — Day 1 = patient's earliest date
-    # (Preserves original FilesGenerator-bedgraph.py logic exactly)
     # ------------------------------------------------------------------ #
     patient_first_dates = df.groupby("PatientID")["Date"].min()
     df["day_offset"] = df.apply(
@@ -115,23 +95,18 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
 
         existing = db.get(Patient, pid)
         if existing:
-            # Update date range if new data extends it
             existing.first_date = min(existing.first_date, first_date)
             existing.last_date  = max(existing.last_date,  last_date)
             existing.total_days = (existing.last_date - existing.first_date).days + 1
         else:
             db.add(Patient(
-                id=pid,
-                first_date=first_date,
-                last_date=last_date,
-                total_days=total_days,
+                id=pid, first_date=first_date,
+                last_date=last_date, total_days=total_days,
             ))
-
     db.flush()
 
     # ------------------------------------------------------------------ #
-    # Step 7: Delete existing measurements for affected patients, then re-insert
-    # (Ensures a re-upload of the same file is idempotent)
+    # Step 7: Delete existing measurements for affected patients, re-insert
     # ------------------------------------------------------------------ #
     affected_patients = df["PatientID"].unique().tolist()
     db.query(Measurement).filter(
@@ -157,7 +132,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
             errors.append(f"Row skipped ({row.get('PatientID','?')} / {row.get('Label','?')}): {exc}")
 
     # ------------------------------------------------------------------ #
-    # Step 9: Write upload audit log
+    # Step 9: Audit log
     # ------------------------------------------------------------------ #
     status = "ok" if not errors else "partial"
     db.add(Upload(
@@ -167,9 +142,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
         status=status,
         error_log=json.dumps(errors) if errors else None,
     ))
-
     db.commit()
-    logger.info("Upload complete: %d rows, %d patients, %d errors", rows_added, len(affected_patients), len(errors))
 
     return {
         "patient_count": len(affected_patients),
@@ -179,12 +152,7 @@ def process_csv(file_bytes: bytes, filename: str, db: Session) -> dict:
     }
 
 
-# ------------------------------------------------------------------ #
-# Internal helpers
-# ------------------------------------------------------------------ #
-
 def _fail(filename: str, db: Session, message: str) -> dict:
-    """Record a failed upload in the audit log and return an error response."""
     try:
         db.add(Upload(filename=filename, status="error", error_log=json.dumps([message])))
         db.commit()
