@@ -1,4 +1,4 @@
-# Patient data & generated files
+# Patient data & generated files (ignored in repo root)
 *.csv
 *.db
 *.fasta
@@ -7,3 +7,7 @@
 bedgraphs_by_label/
 beds_by_label/
 igv_export/
+
+# Allow data files in docs/ (GitHub Pages static site)
+!docs/
+!docs/**
