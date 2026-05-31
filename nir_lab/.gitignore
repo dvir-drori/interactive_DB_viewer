@@ -26,6 +26,10 @@ igv_export/
 # CSV input files — may contain patient data
 *.csv
 
+# Allow docs/ for GitHub Pages deployment
+!docs/
+!docs/**
+
 # Node.js
 node_modules/
 frontend/node_modules/
