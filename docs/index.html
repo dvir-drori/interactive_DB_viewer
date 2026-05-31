@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NIR Lab - Transplant Patient Timeline</title>
-  <script src="https://cdn.jsdelivr.net/npm/igv@3.1.1/dist/igv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.0/plotly.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -126,9 +126,10 @@
       padding: 3px 8px;
     }
 
-    /* ── IGV container ── */
-    #igv-container {
+    /* ── Chart container ── */
+    #chart-container {
       margin: 0;
+      min-height: 300px;
     }
 
     /* ── Loading state ── */
@@ -149,17 +150,10 @@
 
   <div class="toolbar-group">
     <label for="patient-select">Patient:</label>
-    <select id="patient-select">
-      <option value="all">All patients (overview)</option>
-    </select>
+    <select id="patient-select"></select>
   </div>
 
-  <div class="toolbar-group">
-    <button id="btn-zoom-in" title="Zoom in">+ Zoom</button>
-    <button id="btn-zoom-out" title="Zoom out">- Zoom</button>
-  </div>
-
-  <span id="patient-info"></span>
+  <span id="patient-info">Use scroll to zoom, drag to pan</span>
 </div>
 
 <div id="track-panel">
@@ -172,16 +166,26 @@
   </div>
 </div>
 
-<div id="loading">Loading IGV browser...</div>
-<div id="igv-container"></div>
+<div id="loading">Loading patient data...</div>
+<div id="chart-container"></div>
 
 <script>
 (function () {
   "use strict";
 
+  // ── Color palette (matching TimelineChart.jsx) ──
+  var LAB_COLORS = [
+    '#4f8ef7','#f59e0b','#10b981','#ef4444','#8b5cf6',
+    '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
+    '#a78bfa','#fb923c','#34d399','#f472b6','#60a5fa'
+  ];
+
+  function colorForIndex(i) {
+    return LAB_COLORS[i % LAB_COLORS.length];
+  }
+
   // ── Track definitions ──
-  // Clinical lab tracks (bedGraph files in bedgraphs_by_label/)
-  const TRACKS = [
+  var TRACKS = [
     { name: "ALT",         file: "ALANINE.AM.TRAN (ALT).bedGraph", group: "clinical" },
     { name: "ALBUMIN",     file: "ALBUMIN.bedGraph",               group: "clinical" },
     { name: "ALK. PHOS.",  file: "ALK. PHOS..bedGraph",            group: "clinical" },
@@ -210,30 +214,28 @@
     { name: "H3K4me3 (3/3)", file: "H3K4me3_value-0.1_number-3_of_3.bedGraph", group: "epigenetic" },
   ];
 
-  // Default tracks to show on load (key clinical ones)
-  const DEFAULT_TRACKS = new Set([
+  var DEFAULT_TRACKS = new Set([
     "ALT", "AST", "CREATININE", "WBC", "HGB", "PLATELETS"
   ]);
 
   // ── State ──
-  let browser = null;
-  let patients = [];         // [{id: "TRN0001", len: 2067}, ...]
-  let activeTracks = {};     // name -> igv track object
-  let enabledTracks = new Set(DEFAULT_TRACKS);
+  var patients = [];            // [{id, len}, ...]
+  var selectedPatient = null;
+  var enabledTracks = new Set(DEFAULT_TRACKS);
+  var bedGraphCache = {};       // file -> [{patientId, day, value}, ...]
+  var rendering = false;
 
   // ── Parse patients.fasta.fai ──
   async function loadPatientList() {
-    const resp = await fetch("patients.fasta.fai");
-    const text = await resp.text();
+    var resp = await fetch("patients.fasta.fai");
+    var text = await resp.text();
     patients = text.trim().split("\n").map(function (line) {
-      const cols = line.split("\t");
+      var cols = line.split("\t");
       return { id: cols[0], len: parseInt(cols[1], 10) };
     });
-    // Sort by ID
     patients.sort(function (a, b) { return a.id.localeCompare(b.id); });
 
-    // Populate dropdown
-    const sel = document.getElementById("patient-select");
+    var sel = document.getElementById("patient-select");
     patients.forEach(function (p) {
       var opt = document.createElement("option");
       opt.value = p.id;
@@ -242,7 +244,38 @@
     });
 
     document.getElementById("patient-info").textContent =
-      patients.length + " patients loaded";
+      patients.length + " patients | scroll to zoom, drag to pan";
+
+    selectedPatient = patients[0].id;
+  }
+
+  // ── bedGraph fetcher + parser ──
+  async function fetchBedGraph(file) {
+    if (bedGraphCache[file]) return bedGraphCache[file];
+
+    var resp = await fetch("bedgraphs_by_label/" + file);
+    var text = await resp.text();
+    var rows = [];
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.startsWith("track")) continue;
+      var cols = line.split("\t");
+      if (cols.length < 4) continue;
+      rows.push({
+        patientId: cols[0],
+        day: parseInt(cols[2], 10),
+        value: parseFloat(cols[3])
+      });
+    }
+    bedGraphCache[file] = rows;
+    return rows;
+  }
+
+  function filterForPatient(rows, patientId) {
+    return rows
+      .filter(function (r) { return r.patientId === patientId; })
+      .sort(function (a, b) { return a.day - b.day; });
   }
 
   // ── Build track chip UI ──
@@ -253,29 +286,27 @@
     TRACKS.forEach(function (t) {
       var chip = document.createElement("label");
       chip.className = "track-chip" + (enabledTracks.has(t.name) ? " active" : "");
+      chip.setAttribute("data-track", t.name);
       chip.innerHTML = '<input type="checkbox"' +
         (enabledTracks.has(t.name) ? " checked" : "") + '>' + t.name;
 
-      chip.addEventListener("click", function (e) {
-        // Toggle happens on the input; we read it after
+      chip.addEventListener("click", function () {
         setTimeout(function () {
           var checked = chip.querySelector("input").checked;
           if (checked) {
             enabledTracks.add(t.name);
             chip.classList.add("active");
-            addTrack(t);
           } else {
             enabledTracks.delete(t.name);
             chip.classList.remove("active");
-            removeTrack(t.name);
           }
+          renderChart();
         }, 0);
       });
 
       panel.insertBefore(chip, ref);
     });
 
-    // Bulk actions
     document.getElementById("btn-all-tracks").addEventListener("click", function () {
       setAllTracks(true);
     });
@@ -285,137 +316,224 @@
     document.getElementById("btn-clinical-tracks").addEventListener("click", function () {
       TRACKS.forEach(function (t) {
         var want = t.group === "clinical";
-        var has = enabledTracks.has(t.name);
-        if (want && !has) {
-          enabledTracks.add(t.name);
-          addTrack(t);
-        } else if (!want && has) {
-          enabledTracks.delete(t.name);
-          removeTrack(t.name);
-        }
+        if (want) enabledTracks.add(t.name);
+        else enabledTracks.delete(t.name);
       });
       updateChipUI();
+      renderChart();
     });
   }
 
   function setAllTracks(on) {
     TRACKS.forEach(function (t) {
-      if (on && !enabledTracks.has(t.name)) {
-        enabledTracks.add(t.name);
-        addTrack(t);
-      } else if (!on && enabledTracks.has(t.name)) {
-        enabledTracks.delete(t.name);
-        removeTrack(t.name);
-      }
+      if (on) enabledTracks.add(t.name);
+      else enabledTracks.delete(t.name);
     });
     updateChipUI();
+    renderChart();
   }
 
   function updateChipUI() {
     document.querySelectorAll(".track-chip").forEach(function (chip) {
       var input = chip.querySelector("input");
-      var name = chip.textContent;
-      var isActive = false;
-      TRACKS.forEach(function (t) {
-        if (t.name === name) isActive = enabledTracks.has(t.name);
-      });
+      var trackName = chip.getAttribute("data-track");
+      var isActive = enabledTracks.has(trackName);
       input.checked = isActive;
       chip.classList.toggle("active", isActive);
     });
   }
 
-  // ── IGV track management ──
-  function makeTrackConfig(t) {
-    return {
-      name: t.name,
-      url: "bedgraphs_by_label/" + t.file,
-      format: "bedgraph",
-      autoscale: true,
-      _trackKey: t.name
-    };
-  }
+  // ── Render Plotly chart ──
+  async function renderChart() {
+    if (rendering) return;
+    rendering = true;
 
-  function addTrack(t) {
-    if (!browser || activeTracks[t.name]) return;
-    var cfg = makeTrackConfig(t);
-    browser.loadTrack(cfg).then(function (track) {
-      activeTracks[t.name] = track;
-    });
-  }
+    var container = document.getElementById("chart-container");
+    var loadingEl = document.getElementById("loading");
 
-  function removeTrack(name) {
-    if (!browser || !activeTracks[name]) return;
-    browser.removeTrack(activeTracks[name]);
-    delete activeTracks[name];
-  }
-
-  // ── Initialize IGV ──
-  async function initBrowser() {
-    // Build initial track configs
-    var initialTracks = [];
-    TRACKS.forEach(function (t) {
-      if (enabledTracks.has(t.name)) {
-        initialTracks.push(makeTrackConfig(t));
-      }
-    });
-
-    // Add annotations track
-    initialTracks.push({
-      name: "Annotations",
-      url: "annotations.gff",
-      format: "gff",
-      color: "#4caf50",
-      displayMode: "EXPANDED",
-      _trackKey: "__annotations__"
-    });
-
-    var options = {
-      genome: {
-        id: "patients",
-        name: "Patients",
-        fastaURL: "patients.fasta",
-        indexURL: "patients.fasta.fai"
-      },
-      locus: "all",
-      showChromosomeWidget: true,
-      tracks: initialTracks
-    };
-
-    document.getElementById("loading").style.display = "none";
-
-    browser = await igv.createBrowser(
-      document.getElementById("igv-container"),
-      options
-    );
-
-    // Store references to loaded tracks
-    if (browser.trackViews) {
-      browser.trackViews.forEach(function (tv) {
-        if (tv.track && tv.track.config && tv.track.config._trackKey) {
-          activeTracks[tv.track.config._trackKey] = tv.track;
-        }
-      });
+    if (!selectedPatient) {
+      container.innerHTML = "";
+      loadingEl.style.display = "flex";
+      loadingEl.textContent = "Select a patient";
+      rendering = false;
+      return;
     }
+
+    // Find patient total days
+    var patientObj = null;
+    for (var pi = 0; pi < patients.length; pi++) {
+      if (patients[pi].id === selectedPatient) { patientObj = patients[pi]; break; }
+    }
+    var totalDays = patientObj ? patientObj.len : 400;
+
+    // Determine which tracks are enabled
+    var labTracks = [];
+    var eventTracks = [];
+    TRACKS.forEach(function (t) {
+      if (!enabledTracks.has(t.name)) return;
+      if (t.group === "event") eventTracks.push(t);
+      else labTracks.push(t);
+    });
+
+    if (labTracks.length === 0 && eventTracks.length === 0) {
+      Plotly.purge(container);
+      loadingEl.style.display = "flex";
+      loadingEl.textContent = "Enable tracks to view data";
+      rendering = false;
+      return;
+    }
+
+    loadingEl.style.display = "flex";
+    loadingEl.textContent = "Loading tracks...";
+
+    // Fetch all needed bedGraph files in parallel
+    var allNeeded = labTracks.concat(eventTracks);
+    var fetchPromises = allNeeded.map(function (t) { return fetchBedGraph(t.file); });
+
+    try {
+      await Promise.all(fetchPromises);
+    } catch (e) {
+      loadingEl.textContent = "Error loading data: " + e.message;
+      rendering = false;
+      return;
+    }
+
+    // Build traces and layout
+    var nLab = labTracks.length;
+    var hasEvents = eventTracks.length > 0;
+    var nRows = nLab + (hasEvents ? 1 : 0);
+
+    if (nRows === 0) {
+      rendering = false;
+      return;
+    }
+
+    var traces = [];
+    var layoutYAxes = {};
+
+    // Compute y-axis domain fractions (top to bottom: lab tracks, then events at bottom)
+    var step = 1 / nRows;
+
+    // Lab tracks (top to bottom, index 0 at top)
+    labTracks.forEach(function (t, i) {
+      var rows = bedGraphCache[t.file] || [];
+      var pts = filterForPatient(rows, selectedPatient);
+
+      var axisIndex = i + 1;
+      var axisName = axisIndex === 1 ? "y" : "y" + axisIndex;
+      var axisKey = axisIndex === 1 ? "yaxis" : "yaxis" + axisIndex;
+
+      // Domain: from top, lab track i occupies row i
+      var top = 1 - i * step;
+      var bottom = 1 - (i + 1) * step;
+      if (hasEvents) {
+        // Reserve bottom row for events
+        var labStep = (1 - step) / nLab;
+        top = 1 - i * labStep;
+        bottom = 1 - (i + 1) * labStep;
+      }
+
+      traces.push({
+        type: "scatter",
+        mode: "lines+markers",
+        name: t.name,
+        x: pts.map(function (p) { return p.day; }),
+        y: pts.map(function (p) { return p.value; }),
+        line: { color: colorForIndex(i), width: 1.5 },
+        marker: { size: 5, color: colorForIndex(i) },
+        hovertemplate: "<b>" + t.name + "</b><br>Day %{x}<br>Value: %{y:.2f}<extra></extra>",
+        xaxis: "x",
+        yaxis: axisName,
+      });
+
+      layoutYAxes[axisKey] = {
+        domain: [bottom + 0.01, top - 0.01],
+        title: { text: t.name, font: { size: 10, color: "#9ca3af" }, standoff: 4 },
+        color: "#9ca3af",
+        gridcolor: "#2a2d3e",
+        tickfont: { size: 9, color: "#9ca3af" },
+        zeroline: false,
+      };
+    });
+
+    // Events track (bottom row)
+    if (hasEvents) {
+      var evtAxisIndex = nLab + 1;
+      var evtAxisName = evtAxisIndex === 1 ? "y" : "y" + evtAxisIndex;
+      var evtAxisKey = evtAxisIndex === 1 ? "yaxis" : "yaxis" + evtAxisIndex;
+
+      eventTracks.forEach(function (t) {
+        var rows = bedGraphCache[t.file] || [];
+        var pts = filterForPatient(rows, selectedPatient);
+
+        traces.push({
+          type: "scatter",
+          mode: "markers",
+          name: t.name,
+          x: pts.map(function (p) { return p.day; }),
+          y: pts.map(function () { return t.name; }),
+          marker: {
+            size: 10,
+            color: "#f59e0b",
+            symbol: "diamond",
+            line: { width: 1, color: "#fff" }
+          },
+          hovertemplate: "<b>" + t.name + "</b><br>Day %{x}<extra></extra>",
+          xaxis: "x",
+          yaxis: evtAxisName,
+        });
+      });
+
+      layoutYAxes[evtAxisKey] = {
+        domain: [0, step - 0.01],
+        color: "#9ca3af",
+        gridcolor: "#2a2d3e",
+        tickfont: { size: 9, color: "#9ca3af" },
+        zeroline: false,
+      };
+    }
+
+    // Compute chart height
+    var chartHeight = nLab * 150 + (hasEvents ? 100 : 0) + 60;
+
+    var layout = {
+      height: chartHeight,
+      paper_bgcolor: "transparent",
+      plot_bgcolor: "transparent",
+      showlegend: false,
+      margin: { t: 10, b: 50, l: 90, r: 20 },
+      xaxis: {
+        title: { text: "Day since transplant", font: { size: 11, color: "#9ca3af" } },
+        color: "#9ca3af",
+        gridcolor: "#2a2d3e",
+        range: [0, totalDays + 5],
+        tickfont: { size: 10, color: "#9ca3af" },
+      },
+      font: { color: "#9ca3af", size: 11 },
+    };
+
+    // Merge y-axes into layout
+    var keys = Object.keys(layoutYAxes);
+    for (var k = 0; k < keys.length; k++) {
+      layout[keys[k]] = layoutYAxes[keys[k]];
+    }
+
+    loadingEl.style.display = "none";
+
+    Plotly.react(container, traces, layout, {
+      responsive: true,
+      displayModeBar: true,
+      scrollZoom: true,
+    });
+
+    rendering = false;
   }
 
   // ── Patient navigation ──
   function setupNavigation() {
     document.getElementById("patient-select").addEventListener("change", function () {
-      if (!browser) return;
-      var val = this.value;
-      if (val === "all") {
-        browser.search("all");
-      } else {
-        browser.search(val);
-      }
-    });
-
-    document.getElementById("btn-zoom-in").addEventListener("click", function () {
-      if (browser) browser.zoomIn();
-    });
-
-    document.getElementById("btn-zoom-out").addEventListener("click", function () {
-      if (browser) browser.zoomOut();
+      selectedPatient = this.value;
+      renderChart();
     });
   }
 
@@ -424,7 +542,7 @@
     await loadPatientList();
     buildTrackChips();
     setupNavigation();
-    await initBrowser();
+    await renderChart();
   }
 
   main();
