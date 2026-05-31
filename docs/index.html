@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* ── CSS Variables ── */
+    /* ── CSS Variables — Dark (default) ── */
     :root {
       --color-bg: #0b0f19;
       --color-panel: #111827;
@@ -26,6 +26,27 @@
       --font-mono: 'IBM Plex Mono', monospace;
       --font-heading: 'Syne', sans-serif;
       --sidebar-width: 280px;
+      --plotly-font-color: #9ca3af;
+      --plotly-grid-color: #1e2130;
+      --plotly-bg: transparent;
+    }
+
+    /* ── Light Theme ── */
+    body.light {
+      --color-bg: #f5f7fa;
+      --color-panel: #ffffff;
+      --color-panel-alt: #f0f1f4;
+      --color-border: #d1d5db;
+      --color-accent: #2563eb;
+      --color-text: #1f2937;
+      --color-text-muted: #6b7280;
+      --color-biopsy: #d97706;
+      --color-epigenetic: #7c3aed;
+      --color-success: #059669;
+      --color-error: #dc2626;
+      --plotly-font-color: #6b7280;
+      --plotly-grid-color: #e5e7eb;
+      --plotly-bg: transparent;
     }
 
     /* ── Reset ── */
@@ -132,10 +153,8 @@
       background: #3a3d4e;
     }
 
-    button.active {
-      background: var(--color-accent);
-      color: #000;
-      border-color: var(--color-accent);
+    body.light button:hover {
+      background: #e5e7eb;
     }
 
     input[type="date"] {
@@ -144,6 +163,30 @@
 
     input[type="date"]::-webkit-calendar-picker-indicator {
       filter: invert(0.7);
+    }
+
+    body.light input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: none;
+    }
+
+    /* ── Theme toggle button ── */
+    #btn-theme {
+      font-size: 14px;
+      padding: 3px 8px;
+      line-height: 1;
+    }
+
+    /* ── Rename input ── */
+    .track-name-input {
+      background: var(--color-panel-alt);
+      border: 1px solid var(--color-accent);
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      outline: none;
+      width: 100%;
     }
 
     input[type="file"] { display: none; }
@@ -222,6 +265,10 @@
 
     .category-header:hover {
       background: #1f2233;
+    }
+
+    body.light .category-header:hover {
+      background: #e5e7eb;
     }
 
     .category-header .cat-color {
@@ -538,8 +585,7 @@
   <div class="toolbar-sep"></div>
 
   <div class="toolbar-group">
-    <button id="btn-zoom" class="active" title="Scroll to zoom">Zoom</button>
-    <button id="btn-pan" title="Scroll to pan">Pan</button>
+    <button id="btn-theme" title="Toggle dark/light mode">&#9788;</button>
   </div>
 
   <div class="toolbar-sep"></div>
@@ -606,7 +652,7 @@
   // STATE
   // ═══════════════════════════════════════════════════════
   var STORAGE_KEY = "nir-lab-timeline-state";
-  var STORAGE_VERSION = 5;
+  var STORAGE_VERSION = 6;
   var MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
 
   var state = {
@@ -616,9 +662,10 @@
     trackEnabled: {},
     trackColors: {},
     trackDisplayTypes: {},
+    trackNames: {},
     overlayGroups: [],
     dateRange: { from: null, to: null },
-    scrollMode: "zoom",
+    theme: "dark",
     // Runtime only (not persisted)
     bedGraphCache: {},
     uploadedTracks: [],
@@ -715,6 +762,11 @@
     return getDefaultColor(idx);
   }
 
+  function getTrackName(idx, track) {
+    if (state.trackNames[idx]) return state.trackNames[idx];
+    return track.name;
+  }
+
   function getTrackDisplayType(idx) {
     return state.trackDisplayTypes[idx] || "lines+markers";
   }
@@ -737,9 +789,10 @@
         trackEnabled: state.trackEnabled,
         trackColors: state.trackColors,
         trackDisplayTypes: state.trackDisplayTypes,
+        trackNames: state.trackNames,
         overlayGroups: state.overlayGroups,
         dateRange: state.dateRange,
-        scrollMode: state.scrollMode,
+        theme: state.theme,
         uploadedTracks: state.uploadedTracks,
         uploadedPatients: state.uploadedPatients
       };
@@ -765,9 +818,10 @@
       if (data.trackEnabled) state.trackEnabled = data.trackEnabled;
       if (data.trackColors) state.trackColors = data.trackColors;
       if (data.trackDisplayTypes) state.trackDisplayTypes = data.trackDisplayTypes;
+      if (data.trackNames) state.trackNames = data.trackNames;
       if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
       if (data.dateRange) state.dateRange = data.dateRange;
-      if (data.scrollMode) state.scrollMode = data.scrollMode;
+      if (data.theme) state.theme = data.theme;
       if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
       if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
       return true;
@@ -781,9 +835,10 @@
       trackEnabled: state.trackEnabled,
       trackColors: state.trackColors,
       trackDisplayTypes: state.trackDisplayTypes,
+      trackNames: state.trackNames,
       overlayGroups: state.overlayGroups,
       dateRange: state.dateRange,
-      scrollMode: state.scrollMode,
+      theme: state.theme,
       uploadedTracks: state.uploadedTracks,
       uploadedPatients: state.uploadedPatients
     };
@@ -806,15 +861,15 @@
         if (data.trackEnabled) state.trackEnabled = data.trackEnabled;
         if (data.trackColors) state.trackColors = data.trackColors;
         if (data.trackDisplayTypes) state.trackDisplayTypes = data.trackDisplayTypes;
+        if (data.trackNames) state.trackNames = data.trackNames;
         if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
         if (data.dateRange) state.dateRange = data.dateRange;
-        if (data.scrollMode) state.scrollMode = data.scrollMode;
+        if (data.theme) { state.theme = data.theme; applyTheme(); }
         if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
         if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
         saveToLocalStorage();
         populatePatientDropdown();
         rebuildSidebar();
-        updateToolbarState();
         renderChart();
         showToast("Session imported");
       } catch (err) {
@@ -954,13 +1009,17 @@
   }
 
   function updateToolbarState() {
-    // Scroll mode buttons
-    $("btn-zoom").classList.toggle("active", state.scrollMode === "zoom");
-    $("btn-pan").classList.toggle("active", state.scrollMode === "pan");
-
     // Date range
     if (state.dateRange.from) $("date-from").value = state.dateRange.from;
     if (state.dateRange.to) $("date-to").value = state.dateRange.to;
+  }
+
+  function applyTheme() {
+    if (state.theme === "light") {
+      document.body.classList.add("light");
+    } else {
+      document.body.classList.remove("light");
+    }
   }
 
   function setupToolbarHandlers() {
@@ -987,16 +1046,10 @@
       renderChart();
     });
 
-    // Scroll mode
-    $("btn-zoom").addEventListener("click", function () {
-      state.scrollMode = "zoom";
-      updateToolbarState();
-      saveToLocalStorage();
-      renderChart();
-    });
-    $("btn-pan").addEventListener("click", function () {
-      state.scrollMode = "pan";
-      updateToolbarState();
+    // Theme toggle
+    $("btn-theme").addEventListener("click", function () {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      applyTheme();
       saveToLocalStorage();
       renderChart();
     });
@@ -1185,11 +1238,40 @@
 
     var isEvent = track.category === "Biopsies" || (state.config && state.config.categories[track.category] && state.config.categories[track.category].type === "event");
 
-    // Track name
+    // Track name (double-click to rename)
+    var displayName = getTrackName(idx, track);
     var nameSpan = document.createElement("span");
     nameSpan.className = "track-name";
-    nameSpan.textContent = track.name;
-    nameSpan.title = track.name + (track.unit ? " (" + track.unit + ")" : "");
+    nameSpan.textContent = displayName;
+    nameSpan.title = "Double-click to rename — " + displayName + (track.unit ? " (" + track.unit + ")" : "");
+    nameSpan.addEventListener("dblclick", function (e) {
+      e.stopPropagation();
+      var input = document.createElement("input");
+      input.type = "text";
+      input.className = "track-name-input";
+      input.value = getTrackName(idx, track);
+      nameSpan.textContent = "";
+      nameSpan.appendChild(input);
+      input.focus();
+      input.select();
+      function finishRename() {
+        var newName = input.value.trim();
+        if (newName && newName !== track.name) {
+          state.trackNames[idx] = newName;
+        } else if (newName === track.name) {
+          delete state.trackNames[idx];
+        }
+        nameSpan.textContent = getTrackName(idx, track);
+        nameSpan.title = "Double-click to rename — " + getTrackName(idx, track) + (track.unit ? " (" + track.unit + ")" : "");
+        saveToLocalStorage();
+        renderChart();
+      }
+      input.addEventListener("blur", finishRename);
+      input.addEventListener("keydown", function (ke) {
+        if (ke.key === "Enter") { input.blur(); }
+        if (ke.key === "Escape") { input.value = track.name; input.blur(); }
+      });
+    });
     row.appendChild(nameSpan);
 
     // Unit label
@@ -1360,7 +1442,7 @@
 
       var names = group.map(function (idx) {
         var t = getTrackByIdx(idx);
-        return t ? t.track.name : idx;
+        return t ? getTrackName(idx, t.track) : idx;
       });
       tag.innerHTML = "<span>Group " + (gIdx + 1) + ": " + names.join(", ") + "</span>";
 
@@ -1384,11 +1466,7 @@
       var checked = getOverlayChecked();
       if (checked.length < 2) return;
 
-      // Remove these from any existing groups first
-      state.overlayGroups = state.overlayGroups.map(function (g) {
-        return g.filter(function (idx) { return checked.indexOf(idx) === -1; });
-      }).filter(function (g) { return g.length > 1; });
-
+      // Allow same track in multiple overlays — just add the new group
       state.overlayGroups.push(checked);
       saveToLocalStorage();
       rebuildSidebar();
@@ -1754,12 +1832,14 @@
     var totalWithGap = totalHeight + (rows.length - 1) * gap;
 
     var traces = [];
+    var fontColor = getComputedStyle(document.body).getPropertyValue('--plotly-font-color').trim() || "#9ca3af";
+    var gridColor = getComputedStyle(document.body).getPropertyValue('--plotly-grid-color').trim() || "#1e2130";
     var layout = {
       paper_bgcolor: "transparent",
       plot_bgcolor: "transparent",
       showlegend: false,
       margin: { t: 15, b: 50, l: 70, r: 20 },
-      font: { family: "'IBM Plex Mono', monospace", color: "#9ca3af", size: 10 },
+      font: { family: "'IBM Plex Mono', monospace", color: fontColor, size: 10 },
       height: totalWithGap + 60
     };
 
@@ -1787,30 +1867,34 @@
         var trace = buildContinuousTrace(t, pts, color, displayType, xAxisName, yAxisName, refDate);
         traces.push(trace);
 
+        var tName = getTrackName(t.idx, t.track);
         layout[yAxisKey] = {
           domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
           title: {
-            text: t.track.name + (t.track.unit ? " (" + t.track.unit + ")" : ""),
-            font: { size: 10, color: "#9ca3af" },
+            text: tName + (t.track.unit ? " (" + t.track.unit + ")" : ""),
+            font: { size: 10, color: fontColor },
             standoff: 4
           },
-          color: "#9ca3af",
-          gridcolor: "#1e2130",
-          tickfont: { size: 9, color: "#9ca3af" },
+          color: fontColor,
+          gridcolor: gridColor,
+          tickfont: { size: 9, color: fontColor },
           zeroline: false
         };
       } else if (row.type === "overlay") {
         layout.showlegend = true;
+        var legendBg = state.theme === "light" ? "rgba(255,255,255,0.9)" : "rgba(17,24,39,0.85)";
+        var legendBorder = state.theme === "light" ? "#d1d5db" : "#2a2d3e";
+        var legendFont = state.theme === "light" ? "#1f2937" : "#e0e0e0";
         layout.legend = {
-          bgcolor: "rgba(17,24,39,0.85)",
-          bordercolor: "#2a2d3e",
+          bgcolor: legendBg,
+          bordercolor: legendBorder,
           borderwidth: 1,
-          font: { size: 10, color: "#e0e0e0" },
+          font: { size: 10, color: legendFont },
           x: 1, xanchor: "right",
           y: domainTop, yanchor: "top"
         };
 
-        var yTitle = row.tracks.map(function (t) { return t.track.name; }).join(" / ");
+        var yTitle = row.tracks.map(function (t) { return getTrackName(t.idx, t.track); }).join(" / ");
 
         row.tracks.forEach(function (t) {
           var pts = getTrackData(t, refDate);
@@ -1823,10 +1907,10 @@
 
         layout[yAxisKey] = {
           domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
-          title: { text: yTitle, font: { size: 9, color: "#9ca3af" }, standoff: 4 },
-          color: "#9ca3af",
-          gridcolor: "#1e2130",
-          tickfont: { size: 9, color: "#9ca3af" },
+          title: { text: yTitle, font: { size: 9, color: fontColor }, standoff: 4 },
+          color: fontColor,
+          gridcolor: gridColor,
+          tickfont: { size: 9, color: fontColor },
           zeroline: false
         };
       } else if (row.type === "event") {
@@ -1837,29 +1921,29 @@
 
         layout[yAxisKey] = {
           domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
-          color: "#9ca3af",
-          gridcolor: "#1e2130",
-          tickfont: { size: 9, color: "#9ca3af" },
+          color: fontColor,
+          gridcolor: gridColor,
+          tickfont: { size: 9, color: fontColor },
           zeroline: false
         };
       }
 
-      // X axis for this row
+      // X axis for this row — use date type for calendar dates
+      var day0Date = patient.referenceDate;
       layout[xAxisKey] = {
-        color: "#9ca3af",
-        gridcolor: "#1e2130",
-        tickfont: { size: 9, color: "#9ca3af" },
+        type: "date",
+        color: fontColor,
+        gridcolor: gridColor,
+        tickfont: { size: 9, color: fontColor },
         anchor: yAxisName,
-        zeroline: true,
-        zerolinecolor: "#f59e0b44",
-        zerolinewidth: 1
+        zeroline: false
       };
 
       // Only show x-axis title on bottom row
       if (rIdx === rows.length - 1) {
         layout[xAxisKey].title = {
-          text: "Days since " + (patient.referenceLabel || "reference"),
-          font: { size: 11, color: "#9ca3af" }
+          text: "Date",
+          font: { size: 11, color: fontColor }
         };
       }
 
@@ -1868,40 +1952,40 @@
         layout[xAxisKey].matches = "x";
       }
 
-      // Date range filter (convert dates to day offsets)
+      // Date range filter
       if (state.dateRange.from || state.dateRange.to) {
-        var fromDay = state.dateRange.from ? dateToDay(refDate, state.dateRange.from) : undefined;
-        var toDay = state.dateRange.to ? dateToDay(refDate, state.dateRange.to) : undefined;
         if (axisCount === 1) {
-          layout[xAxisKey].range = [fromDay, toDay];
+          layout[xAxisKey].range = [state.dateRange.from || undefined, state.dateRange.to || undefined];
         }
       }
     });
 
-    // Add Day 0 annotation (transplant line)
+    // Add reference date annotation
+    var refDateStr = patient.referenceDate;
+    var annotBg = state.theme === "light" ? "rgba(255,255,255,0.9)" : "rgba(17,24,39,0.8)";
     layout.annotations = [{
-      x: 0,
+      x: refDateStr,
       y: 1,
       xref: "x",
       yref: "paper",
-      text: patient.referenceLabel || "Day 0",
+      text: patient.referenceLabel || "Reference",
       showarrow: true,
       arrowhead: 0,
       arrowcolor: "#f59e0b88",
       ax: 0,
       ay: -30,
       font: { size: 10, color: "#f59e0b" },
-      bgcolor: "rgba(17,24,39,0.8)",
+      bgcolor: annotBg,
       bordercolor: "#f59e0b44",
       borderwidth: 1,
       borderpad: 3
     }];
 
-    // Vertical line at Day 0
+    // Vertical line at reference date
     layout.shapes = [{
       type: "line",
-      x0: 0,
-      x1: 0,
+      x0: refDateStr,
+      x1: refDateStr,
       y0: 0,
       y1: 1,
       xref: "x",
@@ -1914,17 +1998,12 @@
     var plotConfig = {
       responsive: true,
       displayModeBar: true,
-      scrollZoom: state.scrollMode === "zoom",
+      scrollZoom: false,
       modeBarButtonsToRemove: ["lasso2d", "select2d"]
     };
 
     Plotly.purge(container);
     Plotly.newPlot(container, traces, layout, plotConfig);
-
-    // Pan mode: intercept wheel events
-    if (state.scrollMode === "pan") {
-      setupPanMode(container);
-    }
 
     state.rendering = false;
   }
@@ -1943,19 +2022,20 @@
   }
 
   function buildContinuousTrace(trackInfo, pts, color, displayType, xAxis, yAxis, refDate) {
-    var xVals = pts.map(function (p) { return p.day; });
+    var xVals = pts.map(function (p) { return dayToDate(refDate, p.day); });
     var yVals = pts.map(function (p) { return p.value; });
 
+    var displayName = getTrackName(trackInfo.idx, trackInfo.track);
     var hoverText = pts.map(function (p) {
-      return "<b>" + trackInfo.track.name + "</b><br>" +
-        "Day " + p.day + " (" + dayToDate(refDate, p.day) + ")<br>" +
+      return "<b>" + displayName + "</b><br>" +
+        dayToDate(refDate, p.day) + " (Day " + p.day + ")<br>" +
         "Value: " + p.value.toFixed(2) +
         (trackInfo.track.unit ? " " + trackInfo.track.unit : "") +
         "<extra></extra>";
     });
 
     var trace = {
-      name: trackInfo.track.name,
+      name: displayName,
       x: xVals,
       y: yVals,
       hovertemplate: "%{text}",
@@ -1995,20 +2075,21 @@
   }
 
   function buildEventTrace(trackInfo, pts, xAxis, yAxis, refDate) {
-    var xVals = pts.map(function (p) { return p.day; });
+    var xVals = pts.map(function (p) { return dayToDate(refDate, p.day); });
 
+    var displayName = getTrackName(trackInfo.idx, trackInfo.track);
     var hoverText = pts.map(function (p) {
-      return "<b>" + trackInfo.track.name + "</b><br>" +
-        "Day " + p.day + " (" + dayToDate(refDate, p.day) + ")" +
+      return "<b>" + displayName + "</b><br>" +
+        dayToDate(refDate, p.day) + " (Day " + p.day + ")" +
         "<extra></extra>";
     });
 
     return {
       type: "scatter",
       mode: "markers",
-      name: trackInfo.track.name,
+      name: displayName,
       x: xVals,
-      y: pts.map(function () { return trackInfo.track.name; }),
+      y: pts.map(function () { return displayName; }),
       hovertemplate: "%{text}",
       text: hoverText,
       marker: {
@@ -2021,34 +2102,6 @@
       yaxis: yAxis,
       showlegend: false
     };
-  }
-
-  function setupPanMode(container) {
-    // Remove prior handler
-    if (container._panHandler) {
-      container.removeEventListener("wheel", container._panHandler);
-    }
-
-    container._panHandler = function (e) {
-      e.preventDefault();
-      var plotDiv = container;
-      if (!plotDiv._fullLayout) return;
-
-      var xaxis = plotDiv._fullLayout.xaxis;
-      if (!xaxis || !xaxis.range) return;
-
-      var range = xaxis.range;
-      var r0 = range[0];
-      var r1 = range[1];
-      var span = r1 - r0;
-      var delta = e.deltaY > 0 ? span * 0.1 : -span * 0.1;
-
-      var newRange = [r0 + delta, r1 + delta];
-
-      Plotly.relayout(plotDiv, { "xaxis.range": newRange });
-    };
-
-    container.addEventListener("wheel", container._panHandler, { passive: false });
   }
 
   // ═══════════════════════════════════════════════════════
@@ -2064,6 +2117,7 @@
 
     var restored = restoreSession();
     initState();
+    applyTheme();
 
     populatePatientDropdown();
     updatePatientInfo();
