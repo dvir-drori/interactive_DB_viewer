@@ -910,6 +910,29 @@
     return rows;
   }
 
+  async function loadAllBedGraphs() {
+    if (!state.config) return;
+    var promises = state.config.tracks.map(function (t) {
+      if (t.file) return fetchBedGraph(t.file);
+      return Promise.resolve([]);
+    });
+    await Promise.all(promises);
+  }
+
+  function trackHasDataForPatient(trackInfo, patientId) {
+    var rows;
+    if (trackInfo.source === "uploaded") {
+      var uIdxNum = parseInt(String(trackInfo.idx).replace("u", ""), 10);
+      rows = state.bedGraphCache["_uploaded_" + uIdxNum] || (trackInfo.track._data || []);
+    } else {
+      rows = state.bedGraphCache[trackInfo.track.file] || [];
+    }
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].patientId === patientId) return true;
+    }
+    return false;
+  }
+
   function filterForPatient(rows, patientId) {
     return rows
       .filter(function (r) { return r.patientId === patientId; })
@@ -1028,6 +1051,7 @@
       state.selectedPatientId = this.value;
       updatePatientInfo();
       saveToLocalStorage();
+      rebuildSidebar();
       renderChart();
     });
 
@@ -1096,18 +1120,28 @@
     var categories = {};
     var catOrder = ["Lab Data", "Biopsies", "Epigenetic"];
 
+    var pid = state.selectedPatientId;
+
     state.config.tracks.forEach(function (t, i) {
+      var item = { idx: i, track: t, source: "server" };
+      // Hide tracks with no data for the selected patient
+      if (pid && !trackHasDataForPatient(item, pid)) return;
       var cat = t.category || "Lab Data";
       if (!categories[cat]) categories[cat] = [];
-      categories[cat].push({ idx: i, track: t, source: "server" });
+      categories[cat].push(item);
     });
 
     // Add uploaded tracks category
     if (state.uploadedTracks.length > 0) {
-      catOrder.push("Uploaded");
-      categories["Uploaded"] = state.uploadedTracks.map(function (t, j) {
+      var uploadedVisible = state.uploadedTracks.map(function (t, j) {
         return { idx: "u" + j, track: t, source: "uploaded" };
+      }).filter(function (item) {
+        return !pid || trackHasDataForPatient(item, pid);
       });
+      if (uploadedVisible.length > 0) {
+        catOrder.push("Uploaded");
+        categories["Uploaded"] = uploadedVisible;
+      }
     }
 
     // Reorder tracks within categories based on trackOrder
@@ -2123,8 +2157,17 @@
     updatePatientInfo();
     updateToolbarState();
     setupToolbarHandlers();
-    rebuildSidebar();
     setupDropZone();
+
+    // Pre-fetch all bedGraph files so sidebar knows which tracks have data
+    $("loading").innerHTML = "<span class='spinner'></span> Loading track data...";
+    try {
+      await loadAllBedGraphs();
+    } catch (e) {
+      console.warn("Some bedGraph files failed to load:", e);
+    }
+
+    rebuildSidebar();
 
     if (restored) {
       showToast("Session restored");
