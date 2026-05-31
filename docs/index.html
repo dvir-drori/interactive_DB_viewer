@@ -3,257 +3,840 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NIR Lab - Transplant Patient Timeline</title>
+  <title>NIR Lab — Patient Timeline Viewer</title>
   <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.0/plotly.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
+    /* ── CSS Variables ── */
+    :root {
+      --color-bg: #0b0f19;
+      --color-panel: #111827;
+      --color-panel-alt: #1a1d27;
+      --color-border: #2a2d3e;
+      --color-accent: #38bdf8;
+      --color-text: #e0e0e0;
+      --color-text-muted: #9ca3af;
+      --color-biopsy: #f59e0b;
+      --color-epigenetic: #7c3aed;
+      --color-success: #10b981;
+      --color-error: #ef4444;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --font-heading: 'Syne', sans-serif;
+      --sidebar-width: 280px;
     }
 
-    /* ── Top bar ── */
+    /* ── Reset ── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--color-bg);
+      color: var(--color-text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3d4e; }
+
+    /* ── Toolbar ── */
     #toolbar {
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 10px 20px;
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
+      gap: 12px;
+      padding: 8px 16px;
+      background: var(--color-panel);
+      border-bottom: 1px solid var(--color-border);
       flex-wrap: wrap;
+      flex-shrink: 0;
+      z-index: 100;
     }
 
     #toolbar h1 {
-      font-size: 15px;
+      font-family: var(--font-heading);
+      font-size: 14px;
       font-weight: 600;
-      color: #64b5f6;
+      color: var(--color-accent);
       white-space: nowrap;
+      letter-spacing: 0.5px;
+    }
+
+    .toolbar-sep {
+      width: 1px;
+      height: 24px;
+      background: var(--color-border);
+      flex-shrink: 0;
     }
 
     .toolbar-group {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex-shrink: 0;
     }
 
     .toolbar-group label {
-      font-size: 13px;
-      color: #90a4ae;
+      font-size: 11px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
     }
 
-    select, button {
-      font-size: 13px;
-      padding: 5px 10px;
-      border: 1px solid #0f3460;
+    #patient-meta {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+
+    #patient-meta .meta-value {
+      color: var(--color-text);
+      font-weight: 500;
+    }
+
+    /* ── Form controls ── */
+    select, button, input[type="date"], input[type="file"] {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 8px;
+      border: 1px solid var(--color-border);
       border-radius: 4px;
-      background: #1a1a2e;
-      color: #e0e0e0;
+      background: var(--color-panel-alt);
+      color: var(--color-text);
       cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
     }
 
-    select:hover, button:hover {
-      border-color: #64b5f6;
+    select:hover, button:hover, input[type="date"]:hover {
+      border-color: var(--color-accent);
+    }
+
+    select:focus, input[type="date"]:focus {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 1px var(--color-accent);
     }
 
     button {
-      background: #0f3460;
+      background: var(--color-border);
+      font-weight: 500;
     }
 
     button:hover {
-      background: #1a5276;
+      background: #3a3d4e;
     }
 
-    #patient-info {
-      font-size: 12px;
-      color: #78909c;
-      margin-left: auto;
+    button.active {
+      background: var(--color-accent);
+      color: #000;
+      border-color: var(--color-accent);
     }
 
-    /* ── Track selector panel ── */
-    #track-panel {
-      padding: 8px 20px;
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
+    input[type="date"] {
+      width: 120px;
+    }
+
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.7);
+    }
+
+    input[type="file"] { display: none; }
+
+    /* ── Main Layout ── */
+    #main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--color-panel);
+      border-right: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--color-border);
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header h2 {
+      font-family: var(--font-heading);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text);
+      letter-spacing: 0.3px;
+    }
+
+    .sidebar-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .sidebar-actions button {
+      font-size: 10px;
+      padding: 2px 6px;
+    }
+
+    .track-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    /* ── Category group ── */
+    .category-group {
+      margin-bottom: 2px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--color-panel-alt);
+      cursor: pointer;
+      user-select: none;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .category-header:hover {
+      background: #1f2233;
+    }
+
+    .category-header .cat-color {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .category-header .cat-toggle {
+      margin-left: auto;
+      font-size: 9px;
+      color: var(--color-text-muted);
+    }
+
+    .category-header input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+    }
+
+    /* ── Track row ── */
+    .track-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px 4px 20px;
+      font-size: 11px;
+      cursor: default;
+      transition: background 0.1s;
+      border-left: 2px solid transparent;
+    }
+
+    .track-row:hover {
+      background: var(--color-panel-alt);
+    }
+
+    .track-row.dragging {
+      opacity: 0.4;
+    }
+
+    .track-row.drag-over {
+      border-bottom: 2px solid var(--color-accent);
+    }
+
+    .track-row input[type="checkbox"] {
+      width: 12px;
+      height: 12px;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .track-row .drag-handle {
+      cursor: grab;
+      color: var(--color-text-muted);
+      font-size: 10px;
+      flex-shrink: 0;
+      opacity: 0.4;
+      user-select: none;
+    }
+
+    .track-row:hover .drag-handle {
+      opacity: 1;
+    }
+
+    .track-row .track-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+    }
+
+    .track-row .track-unit {
+      font-size: 9px;
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+
+    .track-row .overlay-cb {
+      width: 12px;
+      height: 12px;
+      accent-color: var(--color-biopsy);
+      cursor: pointer;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .track-row:hover .overlay-cb,
+    .track-row .overlay-cb:checked {
+      opacity: 1;
+    }
+
+    .track-row .overlay-cb-label {
+      font-size: 8px;
+      color: var(--color-biopsy);
+      opacity: 0;
+      transition: opacity 0.15s;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .track-row:hover .overlay-cb-label,
+    .track-row:has(.overlay-cb:checked) .overlay-cb-label {
+      opacity: 1;
+    }
+
+    .track-row input[type="color"] {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--color-border);
+      border-radius: 3px;
+      padding: 0;
+      cursor: pointer;
+      background: none;
+      flex-shrink: 0;
+    }
+
+    .track-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 1px; }
+    .track-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+    .track-row select.display-type {
+      width: 60px;
+      font-size: 9px;
+      padding: 1px 2px;
+      flex-shrink: 0;
+    }
+
+    .track-row .badge {
+      font-size: 8px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--color-accent);
+      color: #000;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .track-row .btn-remove {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0 2px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .track-row .btn-remove:hover {
+      color: var(--color-error);
+    }
+
+    /* ── Overlay section ── */
+    .overlay-section {
+      padding: 8px 12px;
+      border-top: 1px solid var(--color-border);
+      flex-shrink: 0;
+    }
+
+    .overlay-section h3 {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .overlay-section .overlay-btns {
+      display: flex;
+      gap: 4px;
       flex-wrap: wrap;
     }
 
-    #track-panel label.section-label {
-      font-size: 12px;
-      color: #64b5f6;
-      font-weight: 600;
-      margin-right: 4px;
+    .overlay-section button {
+      font-size: 10px;
+      padding: 3px 8px;
     }
 
-    .track-chip {
+    .overlay-group-tag {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 12px;
-      background: #1a1a2e;
-      border: 1px solid #0f3460;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--color-panel-alt);
+      border: 1px solid var(--color-border);
+      margin: 2px 0;
+    }
+
+    .overlay-group-tag .split-btn {
       cursor: pointer;
-      user-select: none;
-      transition: all 0.15s;
+      color: var(--color-text-muted);
+      font-size: 10px;
+      border: none;
+      background: none;
+      padding: 0;
     }
 
-    .track-chip:hover {
-      border-color: #64b5f6;
+    .overlay-group-tag .split-btn:hover {
+      color: var(--color-error);
     }
 
-    .track-chip.active {
-      background: #0f3460;
-      border-color: #64b5f6;
-      color: #fff;
+    /* ── Chart Area ── */
+    #chart-area {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+      background: var(--color-bg);
     }
 
-    .track-chip input { display: none; }
-
-    .track-actions {
-      margin-left: auto;
-      display: flex;
-      gap: 6px;
-    }
-
-    .track-actions button {
-      font-size: 11px;
-      padding: 3px 8px;
-    }
-
-    /* ── Chart container ── */
     #chart-container {
-      margin: 0;
       min-height: 300px;
     }
 
-    /* ── Loading state ── */
     #loading {
       display: flex;
       align-items: center;
       justify-content: center;
       height: 300px;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    #loading .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Drop zone ── */
+    #drop-zone {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(56, 189, 248, 0.08);
+      border: 2px dashed var(--color-accent);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
       font-size: 14px;
-      color: #78909c;
+      color: var(--color-accent);
+      font-weight: 500;
+      pointer-events: none;
+    }
+
+    #drop-zone.visible {
+      display: flex;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 18px;
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--color-text);
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    #toast.visible {
+      transform: translateY(0);
+      opacity: 1;
     }
   </style>
 </head>
 <body>
 
-<div id="toolbar">
-  <h1>NIR Lab &middot; Transplant Timeline</h1>
+<!-- ── Toolbar ── -->
+<header id="toolbar">
+  <h1>NIR Lab &middot; Timeline</h1>
+
+  <div class="toolbar-sep"></div>
 
   <div class="toolbar-group">
-    <label for="patient-select">Patient:</label>
+    <label for="patient-select">Patient</label>
     <select id="patient-select"></select>
   </div>
 
-  <span id="patient-info">Use scroll to zoom, drag to pan</span>
-</div>
+  <span id="patient-meta"></span>
 
-<div id="track-panel">
-  <label class="section-label">Tracks:</label>
-  <!-- chips injected by JS -->
-  <div class="track-actions">
-    <button id="btn-all-tracks">All</button>
-    <button id="btn-no-tracks">None</button>
-    <button id="btn-clinical-tracks">Clinical</button>
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <label>From</label>
+    <input type="date" id="date-from">
+    <label>To</label>
+    <input type="date" id="date-to">
+    <button id="btn-date-apply">Apply</button>
+    <button id="btn-date-reset">Reset</button>
   </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <button id="btn-zoom" class="active" title="Scroll to zoom">Zoom</button>
+    <button id="btn-pan" title="Scroll to pan">Pan</button>
+  </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <button id="btn-session-save" title="Export session as JSON">Save</button>
+    <button id="btn-session-load" title="Import session from JSON">Load</button>
+    <input type="file" id="file-session" accept=".json">
+  </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <button id="btn-upload-bg" title="Upload bedGraph files">+ bedGraph</button>
+    <input type="file" id="file-bedgraph" accept=".bedGraph,.bg" multiple>
+    <button id="btn-upload-csv" title="Upload CSV data">+ CSV</button>
+    <input type="file" id="file-csv" accept=".csv">
+  </div>
+</header>
+
+<!-- ── Main Layout ── -->
+<div id="main-layout">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h2>Tracks</h2>
+      <div class="sidebar-actions">
+        <button id="btn-all">All</button>
+        <button id="btn-none">None</button>
+      </div>
+    </div>
+
+    <div class="track-list" id="track-list">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="overlay-section" id="overlay-section">
+      <h3>Overlays</h3>
+      <div class="overlay-btns">
+        <button id="btn-create-overlay" disabled>Create Overlay</button>
+        <button id="btn-split-all">Split All</button>
+      </div>
+      <div id="overlay-groups"></div>
+    </div>
+  </aside>
+
+  <!-- Chart area -->
+  <main id="chart-area">
+    <div id="loading"><span class="spinner"></span> Loading...</div>
+    <div id="chart-container"></div>
+    <div id="drop-zone">Drop bedGraph or CSV files here</div>
+  </main>
 </div>
 
-<div id="loading">Loading patient data...</div>
-<div id="chart-container"></div>
+<!-- Toast -->
+<div id="toast"></div>
 
 <script>
 (function () {
   "use strict";
 
-  // ── Color palette (matching TimelineChart.jsx) ──
-  var LAB_COLORS = [
-    '#4f8ef7','#f59e0b','#10b981','#ef4444','#8b5cf6',
+  // ═══════════════════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════════════════
+  var STORAGE_KEY = "nir-lab-timeline-state";
+  var STORAGE_VERSION = 5;
+  var MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  var state = {
+    config: null,
+    selectedPatientId: null,
+    trackOrder: [],
+    trackEnabled: {},
+    trackColors: {},
+    trackDisplayTypes: {},
+    overlayGroups: [],
+    dateRange: { from: null, to: null },
+    scrollMode: "zoom",
+    // Runtime only (not persisted)
+    bedGraphCache: {},
+    uploadedTracks: [],
+    uploadedPatients: [],
+    rendering: false
+  };
+
+  var DEFAULT_ENABLED = [
+    "ALANINE.AM.TRAN (ALT)", "ASPART.AM.TRANS (AST)", "CREATININE",
+    "WBC", "HGB", "PLATELETS"
+  ];
+
+  var DISPLAY_TYPES = [
+    { value: "lines+markers", label: "Line+Dot" },
+    { value: "markers",       label: "Dots" },
+    { value: "bar",           label: "Bars" },
+    { value: "area",          label: "Area" },
+    { value: "step",          label: "Step" }
+  ];
+
+  // ═══════════════════════════════════════════════════════
+  // UTILITY
+  // ═══════════════════════════════════════════════════════
+  function $(id) { return document.getElementById(id); }
+
+  function dayToDate(refDate, day) {
+    var d = new Date(refDate);
+    d.setDate(d.getDate() + day);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function dateToDay(refDate, dateStr) {
+    var ref = new Date(refDate);
+    var d = new Date(dateStr);
+    return Math.round((d - ref) / 86400000);
+  }
+
+  function showToast(msg) {
+    var toast = $("toast");
+    toast.textContent = msg;
+    toast.classList.add("visible");
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(function () {
+      toast.classList.remove("visible");
+    }, 3000);
+  }
+
+  function getPatient(id) {
+    if (!state.config) return null;
+    var all = state.config.patients.concat(state.uploadedPatients);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === id) return all[i];
+    }
+    return null;
+  }
+
+  function getAllTracks() {
+    var tracks = [];
+    if (state.config) {
+      for (var i = 0; i < state.config.tracks.length; i++) {
+        tracks.push({ idx: i, source: "server", track: state.config.tracks[i] });
+      }
+    }
+    for (var j = 0; j < state.uploadedTracks.length; j++) {
+      tracks.push({ idx: "u" + j, source: "uploaded", track: state.uploadedTracks[j] });
+    }
+    return tracks;
+  }
+
+  function getTrackByIdx(idx) {
+    var all = getAllTracks();
+    for (var i = 0; i < all.length; i++) {
+      if (String(all[i].idx) === String(idx)) return all[i];
+    }
+    return null;
+  }
+
+  var TRACK_PALETTE = [
+    '#4f8ef7','#10b981','#ef4444','#8b5cf6',
     '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
-    '#a78bfa','#fb923c','#34d399','#f472b6','#60a5fa'
+    '#a78bfa','#fb923c','#34d399','#f472b6','#60a5fa',
+    '#facc15','#22d3ee','#c084fc','#fb7185','#2dd4bf',
+    '#fbbf24','#818cf8','#4ade80','#f87171','#38bdf8',
+    '#a3e635','#e879f9'
   ];
 
-  function colorForIndex(i) {
-    return LAB_COLORS[i % LAB_COLORS.length];
+  function getDefaultColor(idx) {
+    var numIdx = parseInt(String(idx).replace("u", ""), 10) || 0;
+    return TRACK_PALETTE[numIdx % TRACK_PALETTE.length];
   }
 
-  // ── Track definitions ──
-  var TRACKS = [
-    { name: "ALT",         file: "ALANINE.AM.TRAN (ALT).bedGraph", group: "clinical" },
-    { name: "ALBUMIN",     file: "ALBUMIN.bedGraph",               group: "clinical" },
-    { name: "ALK. PHOS.",  file: "ALK. PHOS..bedGraph",            group: "clinical" },
-    { name: "AST",         file: "ASPART.AM.TRANS (AST).bedGraph", group: "clinical" },
-    { name: "BILE ACIDS",  file: "BILE ACIDS.bedGraph",            group: "clinical" },
-    { name: "CMV-PCR",     file: "CMV-PCR.bedGraph",               group: "clinical" },
-    { name: "CREATININE",  file: "CREATININE.bedGraph",            group: "clinical" },
-    { name: "DIASTASE",    file: "DIASTASE.bedGraph",              group: "clinical" },
-    { name: "EBV-PCR",     file: "EBV-PCR.bedGraph",               group: "clinical" },
-    { name: "GGTP",        file: "GGTP.bedGraph",                  group: "clinical" },
-    { name: "GLUCOSE",     file: "GLUCOSE.bedGraph",               group: "clinical" },
-    { name: "HGB",         file: "HGB.bedGraph",                   group: "clinical" },
-    { name: "INR",         file: "INR.bedGraph",                   group: "clinical" },
-    { name: "LDH",         file: "LDH.bedGraph",                   group: "clinical" },
-    { name: "LYMPHOCYTE",  file: "LYMPHOCYTE.bedGraph",            group: "clinical" },
-    { name: "NEUTROPHILE", file: "NEUTROPHILE.bedGraph",           group: "clinical" },
-    { name: "PLATELETS",   file: "PLATELETS.bedGraph",             group: "clinical" },
-    { name: "POTASSIUM",   file: "POTASSIUM.bedGraph",             group: "clinical" },
-    { name: "SODIUM",      file: "SODIUM.bedGraph",                group: "clinical" },
-    { name: "T.BILIRUBIN", file: "T.BILIRUBIN.bedGraph",           group: "clinical" },
-    { name: "UREA",        file: "UREA.bedGraph",                  group: "clinical" },
-    { name: "WBC",         file: "WBC.bedGraph",                   group: "clinical" },
-    { name: "Biopsy",      file: "Biopsy_value-0.1_number-1_of_1.bedGraph", group: "event" },
-    { name: "H3K4me3 (1/3)", file: "H3K4me3_value-1_number-1_of_3.bedGraph",   group: "epigenetic" },
-    { name: "H3K4me3 (2/3)", file: "H3K4me3_value-2_number-2_of_3.bedGraph",   group: "epigenetic" },
-    { name: "H3K4me3 (3/3)", file: "H3K4me3_value-0.1_number-3_of_3.bedGraph", group: "epigenetic" },
-  ];
-
-  var DEFAULT_TRACKS = new Set([
-    "ALT", "AST", "CREATININE", "WBC", "HGB", "PLATELETS"
-  ]);
-
-  // ── State ──
-  var patients = [];            // [{id, len}, ...]
-  var selectedPatient = null;
-  var enabledTracks = new Set(DEFAULT_TRACKS);
-  var bedGraphCache = {};       // file -> [{patientId, day, value}, ...]
-  var rendering = false;
-
-  // ── Parse patients.fasta.fai ──
-  async function loadPatientList() {
-    var resp = await fetch("patients.fasta.fai");
-    var text = await resp.text();
-    patients = text.trim().split("\n").map(function (line) {
-      var cols = line.split("\t");
-      return { id: cols[0], len: parseInt(cols[1], 10) };
-    });
-    patients.sort(function (a, b) { return a.id.localeCompare(b.id); });
-
-    var sel = document.getElementById("patient-select");
-    patients.forEach(function (p) {
-      var opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = p.id + " (" + p.len + " days)";
-      sel.appendChild(opt);
-    });
-
-    document.getElementById("patient-info").textContent =
-      patients.length + " patients | scroll to zoom, drag to pan";
-
-    selectedPatient = patients[0].id;
+  function getTrackColor(idx) {
+    if (state.trackColors[idx]) return state.trackColors[idx];
+    return getDefaultColor(idx);
   }
 
-  // ── bedGraph fetcher + parser ──
+  function getTrackDisplayType(idx) {
+    return state.trackDisplayTypes[idx] || "lines+markers";
+  }
+
+  function isOverlaid(idx) {
+    for (var g = 0; g < state.overlayGroups.length; g++) {
+      if (state.overlayGroups[g].indexOf(String(idx)) !== -1) return true;
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // PERSISTENCE
+  // ═══════════════════════════════════════════════════════
+  function saveToLocalStorage() {
+    try {
+      var data = {
+        selectedPatientId: state.selectedPatientId,
+        trackOrder: state.trackOrder,
+        trackEnabled: state.trackEnabled,
+        trackColors: state.trackColors,
+        trackDisplayTypes: state.trackDisplayTypes,
+        overlayGroups: state.overlayGroups,
+        dateRange: state.dateRange,
+        scrollMode: state.scrollMode,
+        uploadedTracks: state.uploadedTracks,
+        uploadedPatients: state.uploadedPatients
+      };
+      data._version = STORAGE_VERSION;
+      var json = JSON.stringify(data);
+      if (json.length < MAX_UPLOAD_SIZE) {
+        localStorage.setItem(STORAGE_KEY, json);
+      }
+    } catch (e) { /* localStorage full or unavailable */ }
+  }
+
+  function restoreSession() {
+    try {
+      var json = localStorage.getItem(STORAGE_KEY);
+      if (!json) return false;
+      var data = JSON.parse(json);
+      if (data._version !== STORAGE_VERSION) {
+        localStorage.removeItem(STORAGE_KEY);
+        return false;
+      }
+      if (data.selectedPatientId) state.selectedPatientId = data.selectedPatientId;
+      if (data.trackOrder) state.trackOrder = data.trackOrder;
+      if (data.trackEnabled) state.trackEnabled = data.trackEnabled;
+      if (data.trackColors) state.trackColors = data.trackColors;
+      if (data.trackDisplayTypes) state.trackDisplayTypes = data.trackDisplayTypes;
+      if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
+      if (data.dateRange) state.dateRange = data.dateRange;
+      if (data.scrollMode) state.scrollMode = data.scrollMode;
+      if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
+      if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function exportSession() {
+    var data = {
+      selectedPatientId: state.selectedPatientId,
+      trackOrder: state.trackOrder,
+      trackEnabled: state.trackEnabled,
+      trackColors: state.trackColors,
+      trackDisplayTypes: state.trackDisplayTypes,
+      overlayGroups: state.overlayGroups,
+      dateRange: state.dateRange,
+      scrollMode: state.scrollMode,
+      uploadedTracks: state.uploadedTracks,
+      uploadedPatients: state.uploadedPatients
+    };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "nir-lab-session.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast("Session exported");
+  }
+
+  function importSession(file) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = JSON.parse(e.target.result);
+        if (data.selectedPatientId) state.selectedPatientId = data.selectedPatientId;
+        if (data.trackOrder) state.trackOrder = data.trackOrder;
+        if (data.trackEnabled) state.trackEnabled = data.trackEnabled;
+        if (data.trackColors) state.trackColors = data.trackColors;
+        if (data.trackDisplayTypes) state.trackDisplayTypes = data.trackDisplayTypes;
+        if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
+        if (data.dateRange) state.dateRange = data.dateRange;
+        if (data.scrollMode) state.scrollMode = data.scrollMode;
+        if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
+        if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
+        saveToLocalStorage();
+        populatePatientDropdown();
+        rebuildSidebar();
+        updateToolbarState();
+        renderChart();
+        showToast("Session imported");
+      } catch (err) {
+        showToast("Invalid session file");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // DATA LOADING
+  // ═══════════════════════════════════════════════════════
+  async function loadConfig() {
+    var resp = await fetch("config.json");
+    if (!resp.ok) throw new Error("Failed to load config.json");
+    state.config = await resp.json();
+  }
+
   async function fetchBedGraph(file) {
-    if (bedGraphCache[file]) return bedGraphCache[file];
-
+    if (state.bedGraphCache[file]) return state.bedGraphCache[file];
     var resp = await fetch("bedgraphs_by_label/" + file);
+    if (!resp.ok) return [];
     var text = await resp.text();
     var rows = [];
     var lines = text.split("\n");
@@ -268,7 +851,7 @@
         value: parseFloat(cols[3])
       });
     }
-    bedGraphCache[file] = rows;
+    state.bedGraphCache[file] = rows;
     return rows;
   }
 
@@ -278,271 +861,1228 @@
       .sort(function (a, b) { return a.day - b.day; });
   }
 
-  // ── Build track chip UI ──
-  function buildTrackChips() {
-    var panel = document.getElementById("track-panel");
-    var ref = panel.querySelector(".track-actions");
+  function filterByDateRange(points, refDate) {
+    if (!state.dateRange.from && !state.dateRange.to) return points;
+    var fromDay = state.dateRange.from ? dateToDay(refDate, state.dateRange.from) : -Infinity;
+    var toDay = state.dateRange.to ? dateToDay(refDate, state.dateRange.to) : Infinity;
+    return points.filter(function (p) { return p.day >= fromDay && p.day <= toDay; });
+  }
 
-    TRACKS.forEach(function (t) {
-      var chip = document.createElement("label");
-      chip.className = "track-chip" + (enabledTracks.has(t.name) ? " active" : "");
-      chip.setAttribute("data-track", t.name);
-      chip.innerHTML = '<input type="checkbox"' +
-        (enabledTracks.has(t.name) ? " checked" : "") + '>' + t.name;
+  // ═══════════════════════════════════════════════════════
+  // INIT STATE
+  // ═══════════════════════════════════════════════════════
+  function initState() {
+    if (!state.config) return;
 
-      chip.addEventListener("click", function () {
-        setTimeout(function () {
-          var checked = chip.querySelector("input").checked;
-          if (checked) {
-            enabledTracks.add(t.name);
-            chip.classList.add("active");
-          } else {
-            enabledTracks.delete(t.name);
-            chip.classList.remove("active");
-          }
-          renderChart();
-        }, 0);
+    // Build track order if empty
+    if (!state.trackOrder || state.trackOrder.length === 0) {
+      state.trackOrder = state.config.tracks.map(function (_, i) { return i; });
+    }
+
+    // Build enabled defaults if empty — enable first 6 lab tracks
+    if (!state.trackEnabled || Object.keys(state.trackEnabled).length === 0) {
+      state.trackEnabled = {};
+      var labCount = 0;
+      state.config.tracks.forEach(function (t, i) {
+        var isContinuous = !state.config.categories[t.category] || state.config.categories[t.category].type !== "event";
+        if (isContinuous && labCount < 6) {
+          state.trackEnabled[i] = true;
+          labCount++;
+        } else {
+          state.trackEnabled[i] = false;
+        }
       });
+    }
 
-      panel.insertBefore(chip, ref);
+    // Default patient
+    if (!state.selectedPatientId && state.config.patients.length > 0) {
+      state.selectedPatientId = state.config.patients[0].id;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // UI: TOOLBAR
+  // ═══════════════════════════════════════════════════════
+  function populatePatientDropdown() {
+    var sel = $("patient-select");
+    sel.innerHTML = "";
+    if (!state.config) return;
+
+    var allPatients = state.config.patients.slice();
+    // Add uploaded patients
+    state.uploadedPatients.forEach(function (p) {
+      // Check for collision
+      var exists = false;
+      for (var i = 0; i < state.config.patients.length; i++) {
+        if (state.config.patients[i].id === p.id) { exists = true; break; }
+      }
+      if (!exists) allPatients.push(p);
     });
 
-    document.getElementById("btn-all-tracks").addEventListener("click", function () {
-      setAllTracks(true);
+    allPatients.sort(function (a, b) { return a.id.localeCompare(b.id); });
+
+    allPatients.forEach(function (p) {
+      var opt = document.createElement("option");
+      opt.value = p.id;
+      var suffix = "";
+      // Check if uploaded
+      for (var j = 0; j < state.uploadedPatients.length; j++) {
+        if (state.uploadedPatients[j].id === p.id) { suffix = " (uploaded)"; break; }
+      }
+      opt.textContent = p.id + suffix;
+      sel.appendChild(opt);
     });
-    document.getElementById("btn-no-tracks").addEventListener("click", function () {
-      setAllTracks(false);
-    });
-    document.getElementById("btn-clinical-tracks").addEventListener("click", function () {
-      TRACKS.forEach(function (t) {
-        var want = t.group === "clinical";
-        if (want) enabledTracks.add(t.name);
-        else enabledTracks.delete(t.name);
-      });
-      updateChipUI();
+
+    if (state.selectedPatientId) sel.value = state.selectedPatientId;
+  }
+
+  function updatePatientInfo() {
+    var meta = $("patient-meta");
+    var p = getPatient(state.selectedPatientId);
+    if (!p) { meta.textContent = ""; return; }
+    var parts = [];
+    if (p.metadata && p.metadata.organ) {
+      parts.push("Organ: <span class='meta-value'>" + p.metadata.organ + "</span>");
+    }
+    if (p.metadata && p.metadata.birthYear && p.metadata.birthYear !== ".") {
+      parts.push("Born: <span class='meta-value'>" + p.metadata.birthYear + "</span>");
+    }
+    if (p.referenceDate) {
+      parts.push(p.referenceLabel + ": <span class='meta-value'>" + p.referenceDate + "</span>");
+    }
+    meta.innerHTML = parts.join(" &nbsp;|&nbsp; ");
+  }
+
+  function updateToolbarState() {
+    // Scroll mode buttons
+    $("btn-zoom").classList.toggle("active", state.scrollMode === "zoom");
+    $("btn-pan").classList.toggle("active", state.scrollMode === "pan");
+
+    // Date range
+    if (state.dateRange.from) $("date-from").value = state.dateRange.from;
+    if (state.dateRange.to) $("date-to").value = state.dateRange.to;
+  }
+
+  function setupToolbarHandlers() {
+    // Patient change
+    $("patient-select").addEventListener("change", function () {
+      state.selectedPatientId = this.value;
+      updatePatientInfo();
+      saveToLocalStorage();
       renderChart();
     });
+
+    // Date range
+    $("btn-date-apply").addEventListener("click", function () {
+      state.dateRange.from = $("date-from").value || null;
+      state.dateRange.to = $("date-to").value || null;
+      saveToLocalStorage();
+      renderChart();
+    });
+    $("btn-date-reset").addEventListener("click", function () {
+      state.dateRange = { from: null, to: null };
+      $("date-from").value = "";
+      $("date-to").value = "";
+      saveToLocalStorage();
+      renderChart();
+    });
+
+    // Scroll mode
+    $("btn-zoom").addEventListener("click", function () {
+      state.scrollMode = "zoom";
+      updateToolbarState();
+      saveToLocalStorage();
+      renderChart();
+    });
+    $("btn-pan").addEventListener("click", function () {
+      state.scrollMode = "pan";
+      updateToolbarState();
+      saveToLocalStorage();
+      renderChart();
+    });
+
+    // Session
+    $("btn-session-save").addEventListener("click", exportSession);
+    $("btn-session-load").addEventListener("click", function () {
+      $("file-session").click();
+    });
+    $("file-session").addEventListener("change", function () {
+      if (this.files.length) importSession(this.files[0]);
+      this.value = "";
+    });
+
+    // Upload bedGraph
+    $("btn-upload-bg").addEventListener("click", function () {
+      $("file-bedgraph").click();
+    });
+    $("file-bedgraph").addEventListener("change", function () {
+      if (this.files.length) onUploadBedGraph(this.files);
+      this.value = "";
+    });
+
+    // Upload CSV
+    $("btn-upload-csv").addEventListener("click", function () {
+      $("file-csv").click();
+    });
+    $("file-csv").addEventListener("change", function () {
+      if (this.files.length) onUploadCSV(this.files[0]);
+      this.value = "";
+    });
   }
 
-  function setAllTracks(on) {
-    TRACKS.forEach(function (t) {
-      if (on) enabledTracks.add(t.name);
-      else enabledTracks.delete(t.name);
+  // ═══════════════════════════════════════════════════════
+  // UI: SIDEBAR
+  // ═══════════════════════════════════════════════════════
+  function rebuildSidebar() {
+    var list = $("track-list");
+    list.innerHTML = "";
+
+    if (!state.config) return;
+
+    // Group tracks by category
+    var categories = {};
+    var catOrder = ["Lab Data", "Biopsies", "Epigenetic"];
+
+    state.config.tracks.forEach(function (t, i) {
+      var cat = t.category || "Lab Data";
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ idx: i, track: t, source: "server" });
     });
-    updateChipUI();
+
+    // Add uploaded tracks category
+    if (state.uploadedTracks.length > 0) {
+      catOrder.push("Uploaded");
+      categories["Uploaded"] = state.uploadedTracks.map(function (t, j) {
+        return { idx: "u" + j, track: t, source: "uploaded" };
+      });
+    }
+
+    // Reorder tracks within categories based on trackOrder
+    catOrder.forEach(function (catName) {
+      var tracks = categories[catName];
+      if (!tracks || tracks.length === 0) return;
+
+      var catColor = "#4f8ef7";
+      if (state.config.categories[catName]) {
+        catColor = state.config.categories[catName].color;
+      } else if (catName === "Uploaded") {
+        catColor = var_color_accent();
+      }
+
+      // Sort by trackOrder position
+      tracks.sort(function (a, b) {
+        var posA = state.trackOrder.indexOf(a.idx);
+        var posB = state.trackOrder.indexOf(b.idx);
+        if (posA === -1) posA = 9999;
+        if (posB === -1) posB = 9999;
+        return posA - posB;
+      });
+
+      // Category header
+      var group = document.createElement("div");
+      group.className = "category-group";
+
+      var header = document.createElement("div");
+      header.className = "category-header";
+
+      var colorDot = document.createElement("span");
+      colorDot.className = "cat-color";
+      colorDot.style.background = catColor;
+      header.appendChild(colorDot);
+
+      var catCb = document.createElement("input");
+      catCb.type = "checkbox";
+      var allEnabled = tracks.every(function (t) { return state.trackEnabled[t.idx]; });
+      catCb.checked = allEnabled;
+      catCb.addEventListener("change", (function (trackList) {
+        return function () {
+          var checked = this.checked;
+          trackList.forEach(function (t) {
+            state.trackEnabled[t.idx] = checked;
+          });
+          saveToLocalStorage();
+          rebuildSidebar();
+          renderChart();
+        };
+      })(tracks));
+      header.appendChild(catCb);
+
+      var catLabel = document.createElement("span");
+      catLabel.textContent = catName + " (" + tracks.length + ")";
+      header.appendChild(catLabel);
+
+      var catToggle = document.createElement("span");
+      catToggle.className = "cat-toggle";
+      catToggle.textContent = "\u25BC";
+      header.appendChild(catToggle);
+
+      group.appendChild(header);
+
+      var trackContainer = document.createElement("div");
+      trackContainer.className = "category-tracks";
+
+      // Build track rows
+      tracks.forEach(function (item) {
+        var row = buildTrackRow(item.idx, item.track, item.source);
+        trackContainer.appendChild(row);
+      });
+
+      group.appendChild(trackContainer);
+
+      // Toggle collapse
+      var collapsed = false;
+      header.addEventListener("click", function (e) {
+        if (e.target.tagName === "INPUT") return;
+        collapsed = !collapsed;
+        trackContainer.style.display = collapsed ? "none" : "";
+        catToggle.textContent = collapsed ? "\u25B6" : "\u25BC";
+      });
+
+      list.appendChild(group);
+    });
+
+    updateOverlaySection();
+
+    // Sidebar All/None buttons
+    $("btn-all").onclick = function () {
+      getAllTracks().forEach(function (t) { state.trackEnabled[t.idx] = true; });
+      saveToLocalStorage();
+      rebuildSidebar();
+      renderChart();
+    };
+    $("btn-none").onclick = function () {
+      getAllTracks().forEach(function (t) { state.trackEnabled[t.idx] = false; });
+      saveToLocalStorage();
+      rebuildSidebar();
+      renderChart();
+    };
+  }
+
+  function var_color_accent() { return "#38bdf8"; }
+
+  function buildTrackRow(idx, track, source) {
+    var row = document.createElement("div");
+    row.className = "track-row";
+    row.setAttribute("data-idx", idx);
+    row.draggable = true;
+
+    // Drag handle
+    var handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.textContent = "\u2630";
+    row.appendChild(handle);
+
+    // Enable checkbox
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!state.trackEnabled[idx];
+    cb.addEventListener("change", function () {
+      state.trackEnabled[idx] = cb.checked;
+      saveToLocalStorage();
+      renderChart();
+    });
+    row.appendChild(cb);
+
+    var isEvent = track.category === "Biopsies" || (state.config && state.config.categories[track.category] && state.config.categories[track.category].type === "event");
+
+    // Track name
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "track-name";
+    nameSpan.textContent = track.name;
+    nameSpan.title = track.name + (track.unit ? " (" + track.unit + ")" : "");
+    row.appendChild(nameSpan);
+
+    // Unit label
+    if (track.unit) {
+      var unitSpan = document.createElement("span");
+      unitSpan.className = "track-unit";
+      unitSpan.textContent = track.unit;
+      row.appendChild(unitSpan);
+    }
+
+    // Overlay checkbox (after name, right side — hidden until hover)
+    if (!isEvent) {
+      var oCbLabel = document.createElement("span");
+      oCbLabel.className = "overlay-cb-label";
+      oCbLabel.textContent = "ovl";
+      row.appendChild(oCbLabel);
+
+      var oCb = document.createElement("input");
+      oCb.type = "checkbox";
+      oCb.className = "overlay-cb";
+      oCb.title = "Select for overlay";
+      oCb.checked = isOverlaid(idx);
+      oCb.addEventListener("change", function () {
+        updateOverlayButtonState();
+      });
+      row.appendChild(oCb);
+    }
+
+    // LOCAL badge for uploaded
+    if (source === "uploaded") {
+      var badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "LOCAL";
+      row.appendChild(badge);
+    }
+
+    // Display type dropdown (only for continuous)
+    if (!isEvent) {
+      var dtSel = document.createElement("select");
+      dtSel.className = "display-type";
+      DISPLAY_TYPES.forEach(function (dt) {
+        var opt = document.createElement("option");
+        opt.value = dt.value;
+        opt.textContent = dt.label;
+        dtSel.appendChild(opt);
+      });
+      dtSel.value = getTrackDisplayType(idx);
+      dtSel.addEventListener("change", function () {
+        state.trackDisplayTypes[idx] = dtSel.value;
+        saveToLocalStorage();
+        renderChart();
+      });
+      row.appendChild(dtSel);
+    }
+
+    // Color picker
+    var colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.value = getTrackColor(idx);
+    colorInput.addEventListener("input", function () {
+      state.trackColors[idx] = colorInput.value;
+      saveToLocalStorage();
+      renderChart();
+    });
+    row.appendChild(colorInput);
+
+    // Remove button for uploaded tracks
+    if (source === "uploaded") {
+      var removeBtn = document.createElement("button");
+      removeBtn.className = "btn-remove";
+      removeBtn.textContent = "\u00D7";
+      removeBtn.title = "Remove track";
+      removeBtn.addEventListener("click", function () {
+        var uIdx = parseInt(String(idx).replace("u", ""), 10);
+        state.uploadedTracks.splice(uIdx, 1);
+        // Remove from enabled/colors/displayTypes
+        delete state.trackEnabled[idx];
+        delete state.trackColors[idx];
+        delete state.trackDisplayTypes[idx];
+        // Remove from overlay groups
+        state.overlayGroups = state.overlayGroups.map(function (g) {
+          return g.filter(function (i) { return i !== String(idx); });
+        }).filter(function (g) { return g.length > 1; });
+        saveToLocalStorage();
+        rebuildSidebar();
+        renderChart();
+      });
+      row.appendChild(removeBtn);
+    }
+
+    // Drag events
+    row.addEventListener("dragstart", function (e) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(idx));
+      row.classList.add("dragging");
+    });
+    row.addEventListener("dragend", function () {
+      row.classList.remove("dragging");
+      document.querySelectorAll(".track-row.drag-over").forEach(function (el) {
+        el.classList.remove("drag-over");
+      });
+    });
+    row.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      row.classList.add("drag-over");
+    });
+    row.addEventListener("dragleave", function () {
+      row.classList.remove("drag-over");
+    });
+    row.addEventListener("drop", function (e) {
+      e.preventDefault();
+      row.classList.remove("drag-over");
+      var fromIdx = e.dataTransfer.getData("text/plain");
+      var toIdx = String(idx);
+      if (fromIdx === toIdx) return;
+
+      // Reorder in trackOrder
+      var fromPos = state.trackOrder.indexOf(isNaN(fromIdx) ? fromIdx : parseInt(fromIdx, 10));
+      var toPos = state.trackOrder.indexOf(isNaN(toIdx) ? toIdx : parseInt(toIdx, 10));
+
+      // Handle uploaded track indices
+      if (fromPos === -1) {
+        fromPos = state.trackOrder.indexOf(fromIdx);
+      }
+      if (toPos === -1) {
+        toPos = state.trackOrder.indexOf(toIdx);
+      }
+
+      if (fromPos !== -1 && toPos !== -1) {
+        var item = state.trackOrder.splice(fromPos, 1)[0];
+        var newToPos = state.trackOrder.indexOf(isNaN(toIdx) ? toIdx : parseInt(toIdx, 10));
+        if (newToPos === -1) newToPos = state.trackOrder.indexOf(toIdx);
+        state.trackOrder.splice(newToPos, 0, item);
+        saveToLocalStorage();
+        rebuildSidebar();
+        renderChart();
+      }
+    });
+
+    return row;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // OVERLAY SYSTEM
+  // ═══════════════════════════════════════════════════════
+  function getOverlayChecked() {
+    var checked = [];
+    document.querySelectorAll(".overlay-cb:checked").forEach(function (cb) {
+      var row = cb.closest(".track-row");
+      if (row) checked.push(row.getAttribute("data-idx"));
+    });
+    return checked;
+  }
+
+  function updateOverlayButtonState() {
+    var checked = getOverlayChecked();
+    $("btn-create-overlay").disabled = checked.length < 2;
+  }
+
+  function updateOverlaySection() {
+    var container = $("overlay-groups");
+    container.innerHTML = "";
+
+    state.overlayGroups.forEach(function (group, gIdx) {
+      var tag = document.createElement("div");
+      tag.className = "overlay-group-tag";
+
+      var names = group.map(function (idx) {
+        var t = getTrackByIdx(idx);
+        return t ? t.track.name : idx;
+      });
+      tag.innerHTML = "<span>Group " + (gIdx + 1) + ": " + names.join(", ") + "</span>";
+
+      var splitBtn = document.createElement("button");
+      splitBtn.className = "split-btn";
+      splitBtn.textContent = "\u00D7";
+      splitBtn.title = "Split this group";
+      splitBtn.addEventListener("click", function () {
+        state.overlayGroups.splice(gIdx, 1);
+        saveToLocalStorage();
+        rebuildSidebar();
+        renderChart();
+      });
+      tag.appendChild(splitBtn);
+
+      container.appendChild(tag);
+    });
+
+    // Wire overlay buttons
+    $("btn-create-overlay").onclick = function () {
+      var checked = getOverlayChecked();
+      if (checked.length < 2) return;
+
+      // Remove these from any existing groups first
+      state.overlayGroups = state.overlayGroups.map(function (g) {
+        return g.filter(function (idx) { return checked.indexOf(idx) === -1; });
+      }).filter(function (g) { return g.length > 1; });
+
+      state.overlayGroups.push(checked);
+      saveToLocalStorage();
+      rebuildSidebar();
+      renderChart();
+      showToast("Overlay created with " + checked.length + " tracks");
+    };
+
+    $("btn-split-all").onclick = function () {
+      state.overlayGroups = [];
+      saveToLocalStorage();
+      rebuildSidebar();
+      renderChart();
+      showToast("All overlays split");
+    };
+
+    updateOverlayButtonState();
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // FILE UPLOAD
+  // ═══════════════════════════════════════════════════════
+  function parseBedGraphText(text, name) {
+    var rows = [];
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.startsWith("track")) continue;
+      var cols = line.split("\t");
+      if (cols.length < 4) continue;
+      rows.push({
+        patientId: cols[0],
+        day: parseInt(cols[2], 10),
+        value: parseFloat(cols[3])
+      });
+    }
+    return rows;
+  }
+
+  function onUploadBedGraph(files) {
+    var count = 0;
+    for (var i = 0; i < files.length; i++) {
+      (function (file) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var trackName = file.name.replace(/\.(bedGraph|bg)$/i, "");
+          var rows = parseBedGraphText(e.target.result, trackName);
+
+          var uIdx = state.uploadedTracks.length;
+          state.uploadedTracks.push({
+            name: trackName,
+            file: null,
+            category: "Uploaded",
+            unit: "",
+            _data: rows
+          });
+          state.trackEnabled["u" + uIdx] = true;
+          state.trackOrder.push("u" + uIdx);
+          state.bedGraphCache["_uploaded_" + uIdx] = rows;
+
+          count++;
+          if (count === files.length) {
+            saveToLocalStorage();
+            rebuildSidebar();
+            renderChart();
+            showToast(count + " bedGraph file(s) uploaded");
+          }
+        };
+        reader.readAsText(file);
+      })(files[i]);
+    }
+  }
+
+  function onUploadCSV(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function (results) {
+        parseCSVForPatients(results.data);
+      },
+      error: function () {
+        showToast("Error parsing CSV");
+      }
+    });
+  }
+
+  function parseCSVForPatients(rows) {
+    // Expected columns: PatientID, Date, Label, Value, Category (optional)
+    // Group by PatientID and Label
+    var patientMap = {};
+    var trackMap = {};
+
+    rows.forEach(function (row) {
+      var pid = row.PatientID || row.patientId || row.Patient || row.patient_id;
+      var dateStr = row.Date || row.date;
+      var label = row.Label || row.label;
+      var value = parseFloat(row.Value || row.value);
+
+      if (!pid || !dateStr || !label) return;
+
+      // Parse date
+      var dateObj;
+      // Try various date formats
+      if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+        var parts = dateStr.split("/");
+        dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+      } else {
+        dateObj = new Date(dateStr);
+      }
+      if (isNaN(dateObj.getTime())) return;
+
+      // Track patients
+      if (!patientMap[pid]) {
+        patientMap[pid] = { dates: [], id: pid };
+      }
+      patientMap[pid].dates.push(dateObj);
+
+      // Track data by label
+      if (!trackMap[label]) trackMap[label] = {};
+      if (!trackMap[label][pid]) trackMap[label][pid] = [];
+      trackMap[label][pid].push({ date: dateObj, value: value });
+    });
+
+    // Create patients: referenceDate = earliest date
+    var newPatients = [];
+    Object.keys(patientMap).forEach(function (pid) {
+      var dates = patientMap[pid].dates;
+      dates.sort(function (a, b) { return a - b; });
+      var refDate = dates[0].toISOString().slice(0, 10);
+
+      // Check if patient already exists
+      var existing = getPatient(pid);
+      if (!existing) {
+        newPatients.push({
+          id: pid,
+          referenceDate: refDate,
+          referenceLabel: "First Record",
+          metadata: {}
+        });
+      }
+    });
+
+    state.uploadedPatients = state.uploadedPatients.concat(newPatients);
+
+    // Create tracks
+    Object.keys(trackMap).forEach(function (label) {
+      var uIdx = state.uploadedTracks.length;
+      var allRows = [];
+
+      Object.keys(trackMap[label]).forEach(function (pid) {
+        var patient = getPatient(pid);
+        var refDate = patient ? patient.referenceDate : null;
+        if (!refDate && patientMap[pid]) {
+          var dates = patientMap[pid].dates;
+          dates.sort(function (a, b) { return a - b; });
+          refDate = dates[0].toISOString().slice(0, 10);
+        }
+        if (!refDate) return;
+
+        trackMap[label][pid].forEach(function (entry) {
+          var dayOffset = Math.round((entry.date - new Date(refDate)) / 86400000);
+          allRows.push({
+            patientId: pid,
+            day: dayOffset,
+            value: entry.value
+          });
+        });
+      });
+
+      state.uploadedTracks.push({
+        name: label,
+        file: null,
+        category: "Uploaded",
+        unit: "",
+        _data: allRows
+      });
+      state.trackEnabled["u" + uIdx] = true;
+      state.trackOrder.push("u" + uIdx);
+      state.bedGraphCache["_uploaded_" + uIdx] = allRows;
+    });
+
+    saveToLocalStorage();
+    populatePatientDropdown();
+    rebuildSidebar();
     renderChart();
+    showToast(newPatients.length + " patient(s), " + Object.keys(trackMap).length + " track(s) from CSV");
   }
 
-  function updateChipUI() {
-    document.querySelectorAll(".track-chip").forEach(function (chip) {
-      var input = chip.querySelector("input");
-      var trackName = chip.getAttribute("data-track");
-      var isActive = enabledTracks.has(trackName);
-      input.checked = isActive;
-      chip.classList.toggle("active", isActive);
+  function setupDropZone() {
+    var chartArea = $("chart-area");
+    var dropZone = $("drop-zone");
+    var dragCounter = 0;
+
+    chartArea.addEventListener("dragenter", function (e) {
+      e.preventDefault();
+      dragCounter++;
+      dropZone.classList.add("visible");
+    });
+    chartArea.addEventListener("dragleave", function () {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropZone.classList.remove("visible");
+      }
+    });
+    chartArea.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    chartArea.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dragCounter = 0;
+      dropZone.classList.remove("visible");
+
+      var files = e.dataTransfer.files;
+      if (!files.length) return;
+
+      var bgFiles = [];
+      var csvFile = null;
+
+      for (var i = 0; i < files.length; i++) {
+        var name = files[i].name.toLowerCase();
+        if (name.endsWith(".bedgraph") || name.endsWith(".bg")) {
+          bgFiles.push(files[i]);
+        } else if (name.endsWith(".csv")) {
+          csvFile = files[i];
+        }
+      }
+
+      if (bgFiles.length) onUploadBedGraph(bgFiles);
+      if (csvFile) onUploadCSV(csvFile);
     });
   }
 
-  // ── Render Plotly chart ──
+  // ═══════════════════════════════════════════════════════
+  // CHART RENDERING
+  // ═══════════════════════════════════════════════════════
   async function renderChart() {
-    if (rendering) return;
-    rendering = true;
+    if (state.rendering) return;
+    state.rendering = true;
 
-    var container = document.getElementById("chart-container");
-    var loadingEl = document.getElementById("loading");
+    var container = $("chart-container");
+    var loadingEl = $("loading");
+    var patient = getPatient(state.selectedPatientId);
 
-    if (!selectedPatient) {
+    if (!patient) {
       container.innerHTML = "";
       loadingEl.style.display = "flex";
-      loadingEl.textContent = "Select a patient";
-      rendering = false;
+      loadingEl.innerHTML = "<span class='spinner'></span> Select a patient";
+      state.rendering = false;
       return;
     }
 
-    // Find patient total days
-    var patientObj = null;
-    for (var pi = 0; pi < patients.length; pi++) {
-      if (patients[pi].id === selectedPatient) { patientObj = patients[pi]; break; }
-    }
-    var totalDays = patientObj ? patientObj.len : 400;
+    var refDate = patient.referenceDate;
 
-    // Determine which tracks are enabled
-    var labTracks = [];
-    var eventTracks = [];
-    TRACKS.forEach(function (t) {
-      if (!enabledTracks.has(t.name)) return;
-      if (t.group === "event") eventTracks.push(t);
-      else labTracks.push(t);
+    // Collect all enabled tracks
+    var allTracks = getAllTracks();
+    var enabledTracks = allTracks.filter(function (t) {
+      return state.trackEnabled[t.idx];
     });
 
-    if (labTracks.length === 0 && eventTracks.length === 0) {
+    if (enabledTracks.length === 0) {
       Plotly.purge(container);
       loadingEl.style.display = "flex";
-      loadingEl.textContent = "Enable tracks to view data";
-      rendering = false;
+      loadingEl.innerHTML = "Enable tracks in the sidebar to view data";
+      state.rendering = false;
       return;
     }
 
     loadingEl.style.display = "flex";
-    loadingEl.textContent = "Loading tracks...";
+    loadingEl.innerHTML = "<span class='spinner'></span> Loading tracks...";
 
-    // Fetch all needed bedGraph files in parallel
-    var allNeeded = labTracks.concat(eventTracks);
-    var fetchPromises = allNeeded.map(function (t) { return fetchBedGraph(t.file); });
+    // Classify tracks
+    var continuousTracks = [];
+    var eventTracks = [];
+
+    enabledTracks.forEach(function (t) {
+      var catType = "continuous";
+      if (state.config && state.config.categories[t.track.category]) {
+        catType = state.config.categories[t.track.category].type;
+      }
+      if (catType === "event") eventTracks.push(t);
+      else continuousTracks.push(t);
+    });
+
+    // Sort by trackOrder
+    continuousTracks.sort(function (a, b) {
+      var posA = state.trackOrder.indexOf(a.idx);
+      var posB = state.trackOrder.indexOf(b.idx);
+      if (posA === -1) posA = state.trackOrder.indexOf(String(a.idx));
+      if (posB === -1) posB = state.trackOrder.indexOf(String(b.idx));
+      if (posA === -1) posA = 9999;
+      if (posB === -1) posB = 9999;
+      return posA - posB;
+    });
+
+    // Separate into individual tracks and overlay groups
+    var overlaidIdxs = new Set();
+    state.overlayGroups.forEach(function (group) {
+      group.forEach(function (idx) { overlaidIdxs.add(String(idx)); });
+    });
+
+    var individualContinuous = continuousTracks.filter(function (t) {
+      return !overlaidIdxs.has(String(t.idx));
+    });
+
+    // Build row structure: individual continuous, overlay groups, events at bottom
+    var rows = []; // Each row: { type: 'single'|'overlay'|'event', tracks: [], height: N }
+
+    individualContinuous.forEach(function (t) {
+      rows.push({ type: "single", tracks: [t], height: 150 });
+    });
+
+    state.overlayGroups.forEach(function (group) {
+      var groupTracks = group.map(function (idx) {
+        return getTrackByIdx(idx);
+      }).filter(function (t) {
+        if (!t) return false;
+        return state.trackEnabled[t.idx] || state.trackEnabled[String(t.idx)];
+      });
+      if (groupTracks.length > 0) {
+        rows.push({ type: "overlay", tracks: groupTracks, height: 180 });
+      }
+    });
+
+    if (eventTracks.length > 0) {
+      rows.push({ type: "event", tracks: eventTracks, height: 80 });
+    }
+
+    if (rows.length === 0) {
+      Plotly.purge(container);
+      loadingEl.style.display = "flex";
+      loadingEl.innerHTML = "No data to display";
+      state.rendering = false;
+      return;
+    }
+
+    // Fetch all needed bedGraph files
+    var fetchPromises = [];
+    enabledTracks.forEach(function (t) {
+      if (t.source === "uploaded") {
+        // Already cached
+        var uIdxNum = parseInt(String(t.idx).replace("u", ""), 10);
+        if (!state.bedGraphCache["_uploaded_" + uIdxNum] && t.track._data) {
+          state.bedGraphCache["_uploaded_" + uIdxNum] = t.track._data;
+        }
+      } else if (t.track.file) {
+        fetchPromises.push(fetchBedGraph(t.track.file));
+      }
+    });
 
     try {
       await Promise.all(fetchPromises);
     } catch (e) {
-      loadingEl.textContent = "Error loading data: " + e.message;
-      rendering = false;
+      loadingEl.innerHTML = "Error loading data: " + e.message;
+      state.rendering = false;
       return;
     }
 
-    // Build traces and layout
-    var nLab = labTracks.length;
-    var hasEvents = eventTracks.length > 0;
-    var nRows = nLab + (hasEvents ? 1 : 0);
-
-    if (nRows === 0) {
-      rendering = false;
-      return;
-    }
+    // Compute subplot domains
+    var totalHeight = 0;
+    rows.forEach(function (r) { totalHeight += r.height; });
+    var gap = 30;
+    var totalWithGap = totalHeight + (rows.length - 1) * gap;
 
     var traces = [];
-    var layoutYAxes = {};
-
-    // Compute y-axis domain fractions (top to bottom: lab tracks, then events at bottom)
-    var step = 1 / nRows;
-
-    // Lab tracks (top to bottom, index 0 at top)
-    labTracks.forEach(function (t, i) {
-      var rows = bedGraphCache[t.file] || [];
-      var pts = filterForPatient(rows, selectedPatient);
-
-      var axisIndex = i + 1;
-      var axisName = axisIndex === 1 ? "y" : "y" + axisIndex;
-      var axisKey = axisIndex === 1 ? "yaxis" : "yaxis" + axisIndex;
-
-      // Domain: from top, lab track i occupies row i
-      var top = 1 - i * step;
-      var bottom = 1 - (i + 1) * step;
-      if (hasEvents) {
-        // Reserve bottom row for events
-        var labStep = (1 - step) / nLab;
-        top = 1 - i * labStep;
-        bottom = 1 - (i + 1) * labStep;
-      }
-
-      traces.push({
-        type: "scatter",
-        mode: "lines+markers",
-        name: t.name,
-        x: pts.map(function (p) { return p.day; }),
-        y: pts.map(function (p) { return p.value; }),
-        line: { color: colorForIndex(i), width: 1.5 },
-        marker: { size: 5, color: colorForIndex(i) },
-        hovertemplate: "<b>" + t.name + "</b><br>Day %{x}<br>Value: %{y:.2f}<extra></extra>",
-        xaxis: "x",
-        yaxis: axisName,
-      });
-
-      layoutYAxes[axisKey] = {
-        domain: [bottom + 0.01, top - 0.01],
-        title: { text: t.name, font: { size: 10, color: "#9ca3af" }, standoff: 4 },
-        color: "#9ca3af",
-        gridcolor: "#2a2d3e",
-        tickfont: { size: 9, color: "#9ca3af" },
-        zeroline: false,
-      };
-    });
-
-    // Events track (bottom row)
-    if (hasEvents) {
-      var evtAxisIndex = nLab + 1;
-      var evtAxisName = evtAxisIndex === 1 ? "y" : "y" + evtAxisIndex;
-      var evtAxisKey = evtAxisIndex === 1 ? "yaxis" : "yaxis" + evtAxisIndex;
-
-      eventTracks.forEach(function (t) {
-        var rows = bedGraphCache[t.file] || [];
-        var pts = filterForPatient(rows, selectedPatient);
-
-        traces.push({
-          type: "scatter",
-          mode: "markers",
-          name: t.name,
-          x: pts.map(function (p) { return p.day; }),
-          y: pts.map(function () { return t.name; }),
-          marker: {
-            size: 10,
-            color: "#f59e0b",
-            symbol: "diamond",
-            line: { width: 1, color: "#fff" }
-          },
-          hovertemplate: "<b>" + t.name + "</b><br>Day %{x}<extra></extra>",
-          xaxis: "x",
-          yaxis: evtAxisName,
-        });
-      });
-
-      layoutYAxes[evtAxisKey] = {
-        domain: [0, step - 0.01],
-        color: "#9ca3af",
-        gridcolor: "#2a2d3e",
-        tickfont: { size: 9, color: "#9ca3af" },
-        zeroline: false,
-      };
-    }
-
-    // Compute chart height
-    var chartHeight = nLab * 150 + (hasEvents ? 100 : 0) + 60;
-
     var layout = {
-      height: chartHeight,
       paper_bgcolor: "transparent",
       plot_bgcolor: "transparent",
       showlegend: false,
-      margin: { t: 10, b: 50, l: 90, r: 20 },
-      xaxis: {
-        title: { text: "Day since transplant", font: { size: 11, color: "#9ca3af" } },
-        color: "#9ca3af",
-        gridcolor: "#2a2d3e",
-        range: [0, totalDays + 5],
-        tickfont: { size: 10, color: "#9ca3af" },
-      },
-      font: { color: "#9ca3af", size: 11 },
+      margin: { t: 15, b: 50, l: 70, r: 20 },
+      font: { family: "'IBM Plex Mono', monospace", color: "#9ca3af", size: 10 },
+      height: totalWithGap + 60
     };
 
-    // Merge y-axes into layout
-    var keys = Object.keys(layoutYAxes);
-    for (var k = 0; k < keys.length; k++) {
-      layout[keys[k]] = layoutYAxes[keys[k]];
-    }
+    var axisCount = 0;
+    var currentTop = 1;
+
+    rows.forEach(function (row, rIdx) {
+      var fraction = row.height / totalWithGap;
+      var gapFraction = gap / totalWithGap;
+      var domainTop = currentTop;
+      var domainBottom = currentTop - fraction;
+      currentTop = domainBottom - gapFraction;
+
+      axisCount++;
+      var yAxisName = axisCount === 1 ? "y" : "y" + axisCount;
+      var yAxisKey = axisCount === 1 ? "yaxis" : "yaxis" + axisCount;
+      var xAxisName = axisCount === 1 ? "x" : "x" + axisCount;
+      var xAxisKey = axisCount === 1 ? "xaxis" : "xaxis" + axisCount;
+
+      if (row.type === "single") {
+        var t = row.tracks[0];
+        var pts = getTrackData(t, refDate);
+        var color = getTrackColor(t.idx);
+        var displayType = getTrackDisplayType(t.idx);
+        var trace = buildContinuousTrace(t, pts, color, displayType, xAxisName, yAxisName, refDate);
+        traces.push(trace);
+
+        layout[yAxisKey] = {
+          domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
+          title: {
+            text: t.track.name + (t.track.unit ? " (" + t.track.unit + ")" : ""),
+            font: { size: 10, color: "#9ca3af" },
+            standoff: 4
+          },
+          color: "#9ca3af",
+          gridcolor: "#1e2130",
+          tickfont: { size: 9, color: "#9ca3af" },
+          zeroline: false
+        };
+      } else if (row.type === "overlay") {
+        layout.showlegend = true;
+        layout.legend = {
+          bgcolor: "rgba(17,24,39,0.85)",
+          bordercolor: "#2a2d3e",
+          borderwidth: 1,
+          font: { size: 10, color: "#e0e0e0" },
+          x: 1, xanchor: "right",
+          y: domainTop, yanchor: "top"
+        };
+
+        var yTitle = row.tracks.map(function (t) { return t.track.name; }).join(" / ");
+
+        row.tracks.forEach(function (t) {
+          var pts = getTrackData(t, refDate);
+          var color = getTrackColor(t.idx);
+          var displayType = getTrackDisplayType(t.idx);
+          var trace = buildContinuousTrace(t, pts, color, displayType, xAxisName, yAxisName, refDate);
+          trace.showlegend = true;
+          traces.push(trace);
+        });
+
+        layout[yAxisKey] = {
+          domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
+          title: { text: yTitle, font: { size: 9, color: "#9ca3af" }, standoff: 4 },
+          color: "#9ca3af",
+          gridcolor: "#1e2130",
+          tickfont: { size: 9, color: "#9ca3af" },
+          zeroline: false
+        };
+      } else if (row.type === "event") {
+        row.tracks.forEach(function (t) {
+          var pts = getTrackData(t, refDate);
+          traces.push(buildEventTrace(t, pts, xAxisName, yAxisName, refDate));
+        });
+
+        layout[yAxisKey] = {
+          domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
+          color: "#9ca3af",
+          gridcolor: "#1e2130",
+          tickfont: { size: 9, color: "#9ca3af" },
+          zeroline: false
+        };
+      }
+
+      // X axis for this row
+      layout[xAxisKey] = {
+        color: "#9ca3af",
+        gridcolor: "#1e2130",
+        tickfont: { size: 9, color: "#9ca3af" },
+        anchor: yAxisName,
+        zeroline: true,
+        zerolinecolor: "#f59e0b44",
+        zerolinewidth: 1
+      };
+
+      // Only show x-axis title on bottom row
+      if (rIdx === rows.length - 1) {
+        layout[xAxisKey].title = {
+          text: "Days since " + (patient.referenceLabel || "reference"),
+          font: { size: 11, color: "#9ca3af" }
+        };
+      }
+
+      // Shared x-axis range: link all to first x-axis via matches
+      if (axisCount > 1) {
+        layout[xAxisKey].matches = "x";
+      }
+
+      // Date range filter (convert dates to day offsets)
+      if (state.dateRange.from || state.dateRange.to) {
+        var fromDay = state.dateRange.from ? dateToDay(refDate, state.dateRange.from) : undefined;
+        var toDay = state.dateRange.to ? dateToDay(refDate, state.dateRange.to) : undefined;
+        if (axisCount === 1) {
+          layout[xAxisKey].range = [fromDay, toDay];
+        }
+      }
+    });
+
+    // Add Day 0 annotation (transplant line)
+    layout.annotations = [{
+      x: 0,
+      y: 1,
+      xref: "x",
+      yref: "paper",
+      text: patient.referenceLabel || "Day 0",
+      showarrow: true,
+      arrowhead: 0,
+      arrowcolor: "#f59e0b88",
+      ax: 0,
+      ay: -30,
+      font: { size: 10, color: "#f59e0b" },
+      bgcolor: "rgba(17,24,39,0.8)",
+      bordercolor: "#f59e0b44",
+      borderwidth: 1,
+      borderpad: 3
+    }];
+
+    // Vertical line at Day 0
+    layout.shapes = [{
+      type: "line",
+      x0: 0,
+      x1: 0,
+      y0: 0,
+      y1: 1,
+      xref: "x",
+      yref: "paper",
+      line: { color: "#f59e0b44", width: 1, dash: "dash" }
+    }];
 
     loadingEl.style.display = "none";
 
-    Plotly.react(container, traces, layout, {
+    var plotConfig = {
       responsive: true,
       displayModeBar: true,
-      scrollZoom: true,
-    });
+      scrollZoom: state.scrollMode === "zoom",
+      modeBarButtonsToRemove: ["lasso2d", "select2d"]
+    };
 
-    rendering = false;
+    Plotly.purge(container);
+    Plotly.newPlot(container, traces, layout, plotConfig);
+
+    // Pan mode: intercept wheel events
+    if (state.scrollMode === "pan") {
+      setupPanMode(container);
+    }
+
+    state.rendering = false;
   }
 
-  // ── Patient navigation ──
-  function setupNavigation() {
-    document.getElementById("patient-select").addEventListener("change", function () {
-      selectedPatient = this.value;
-      renderChart();
-    });
+  function getTrackData(trackInfo, refDate) {
+    var rows;
+    if (trackInfo.source === "uploaded") {
+      var uIdxNum = parseInt(String(trackInfo.idx).replace("u", ""), 10);
+      rows = state.bedGraphCache["_uploaded_" + uIdxNum] || [];
+    } else {
+      rows = state.bedGraphCache[trackInfo.track.file] || [];
+    }
+    var pts = filterForPatient(rows, state.selectedPatientId);
+    pts = filterByDateRange(pts, refDate);
+    return pts;
   }
 
-  // ── Boot ──
+  function buildContinuousTrace(trackInfo, pts, color, displayType, xAxis, yAxis, refDate) {
+    var xVals = pts.map(function (p) { return p.day; });
+    var yVals = pts.map(function (p) { return p.value; });
+
+    var hoverText = pts.map(function (p) {
+      return "<b>" + trackInfo.track.name + "</b><br>" +
+        "Day " + p.day + " (" + dayToDate(refDate, p.day) + ")<br>" +
+        "Value: " + p.value.toFixed(2) +
+        (trackInfo.track.unit ? " " + trackInfo.track.unit : "") +
+        "<extra></extra>";
+    });
+
+    var trace = {
+      name: trackInfo.track.name,
+      x: xVals,
+      y: yVals,
+      hovertemplate: "%{text}",
+      text: hoverText,
+      xaxis: xAxis,
+      yaxis: yAxis,
+      showlegend: false
+    };
+
+    if (displayType === "bar") {
+      trace.type = "bar";
+      trace.marker = { color: color, opacity: 0.8 };
+    } else if (displayType === "area") {
+      trace.type = "scatter";
+      trace.mode = "lines";
+      trace.fill = "tozeroy";
+      trace.fillcolor = color + "33";
+      trace.line = { color: color, width: 1.5 };
+    } else if (displayType === "step") {
+      trace.type = "scatter";
+      trace.mode = "lines+markers";
+      trace.line = { color: color, width: 1.5, shape: "hv" };
+      trace.marker = { size: 4, color: color };
+    } else if (displayType === "markers") {
+      trace.type = "scatter";
+      trace.mode = "markers";
+      trace.marker = { size: 6, color: color };
+    } else {
+      // lines+markers (default)
+      trace.type = "scatter";
+      trace.mode = "lines+markers";
+      trace.line = { color: color, width: 1.5 };
+      trace.marker = { size: 4, color: color };
+    }
+
+    return trace;
+  }
+
+  function buildEventTrace(trackInfo, pts, xAxis, yAxis, refDate) {
+    var xVals = pts.map(function (p) { return p.day; });
+
+    var hoverText = pts.map(function (p) {
+      return "<b>" + trackInfo.track.name + "</b><br>" +
+        "Day " + p.day + " (" + dayToDate(refDate, p.day) + ")" +
+        "<extra></extra>";
+    });
+
+    return {
+      type: "scatter",
+      mode: "markers",
+      name: trackInfo.track.name,
+      x: xVals,
+      y: pts.map(function () { return trackInfo.track.name; }),
+      hovertemplate: "%{text}",
+      text: hoverText,
+      marker: {
+        size: 12,
+        color: "#f59e0b",
+        symbol: "diamond",
+        line: { width: 1.5, color: "#fff" }
+      },
+      xaxis: xAxis,
+      yaxis: yAxis,
+      showlegend: false
+    };
+  }
+
+  function setupPanMode(container) {
+    // Remove prior handler
+    if (container._panHandler) {
+      container.removeEventListener("wheel", container._panHandler);
+    }
+
+    container._panHandler = function (e) {
+      e.preventDefault();
+      var plotDiv = container;
+      if (!plotDiv._fullLayout) return;
+
+      var xaxis = plotDiv._fullLayout.xaxis;
+      if (!xaxis || !xaxis.range) return;
+
+      var range = xaxis.range;
+      var r0 = range[0];
+      var r1 = range[1];
+      var span = r1 - r0;
+      var delta = e.deltaY > 0 ? span * 0.1 : -span * 0.1;
+
+      var newRange = [r0 + delta, r1 + delta];
+
+      Plotly.relayout(plotDiv, { "xaxis.range": newRange });
+    };
+
+    container.addEventListener("wheel", container._panHandler, { passive: false });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // BOOT
+  // ═══════════════════════════════════════════════════════
   async function main() {
-    await loadPatientList();
-    buildTrackChips();
-    setupNavigation();
-    await renderChart();
+    try {
+      await loadConfig();
+    } catch (e) {
+      $("loading").innerHTML = "Failed to load config.json — " + e.message;
+      return;
+    }
+
+    var restored = restoreSession();
+    initState();
+
+    populatePatientDropdown();
+    updatePatientInfo();
+    updateToolbarState();
+    setupToolbarHandlers();
+    rebuildSidebar();
+    setupDropZone();
+
+    if (restored) {
+      showToast("Session restored");
+    }
+
+    try {
+      await renderChart();
+    } catch(e) {
+      console.error("[renderChart] error:", e);
+      $("loading").style.display = "flex";
+      $("loading").innerHTML = "Render error: " + e.message;
+    }
   }
 
   main();
