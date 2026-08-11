@@ -191,6 +191,133 @@
 
     input[type="file"] { display: none; }
 
+    /* ── Checkbox label ── */
+    .chk-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .chk-label input[type="checkbox"] { cursor: pointer; accent-color: var(--color-accent); }
+    .chk-label select { margin-left: 2px; }
+
+    /* ── Patient search combobox ── */
+    .combo { position: relative; }
+    #patient-input {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 4px 8px;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      background: var(--color-panel-alt);
+      color: var(--color-text);
+      outline: none;
+      width: 170px;
+      transition: border-color 0.15s;
+    }
+    #patient-input:focus {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 1px var(--color-accent);
+    }
+    .combo-list {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 200;
+      width: 240px;
+      max-height: 320px;
+      overflow-y: auto;
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      display: none;
+    }
+    .combo-list.open { display: block; }
+    .combo-item {
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .combo-item:last-child { border-bottom: none; }
+    .combo-item:hover, .combo-item.active {
+      background: var(--color-panel-alt);
+    }
+    .combo-item .ci-id { color: var(--color-text); font-weight: 500; }
+    .combo-item .ci-meta { color: var(--color-text-muted); font-size: 10px; }
+    .combo-item mark { background: transparent; color: var(--color-accent); }
+    .combo-empty { padding: 8px 10px; font-size: 11px; color: var(--color-text-muted); }
+    .combo-more { padding: 6px 10px; font-size: 10px; color: var(--color-text-muted); text-align: center; }
+
+    /* ── Insights modal ── */
+    #insights-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    #insights-overlay.open { display: flex; }
+    #insights-modal {
+      width: min(980px, 94vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 18px 20px 22px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    }
+    .insights-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .insights-head h2 {
+      font-family: var(--font-heading);
+      font-size: 18px;
+      color: var(--color-text);
+    }
+    .insights-sub { font-family: var(--font-mono); font-size: 12px; color: var(--color-accent); margin-left: 6px; }
+    .insights-controls { display: flex; align-items: center; gap: 10px; }
+    #btn-insights-close { font-size: 18px; line-height: 1; padding: 2px 9px; }
+    .insights-note { font-size: 11px; color: var(--color-text-muted); margin: 8px 0 14px; max-width: 70ch; }
+    #insights-body { display: flex; flex-direction: column; gap: 18px; }
+    #insights-heatmap { width: 100%; min-height: 60px; }
+    #insights-ranked { display: flex; flex-direction: column; gap: 14px; }
+    .rank-block h3 {
+      font-family: var(--font-heading);
+      font-size: 13px;
+      color: var(--color-text);
+      margin-bottom: 6px;
+    }
+    .rank-row {
+      display: grid;
+      grid-template-columns: 1fr 64px 44px;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 8px;
+      font-size: 11px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .rank-row .rr-pair { color: var(--color-text); }
+    .rank-row .rr-r { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+    .rank-row .rr-n { color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .rank-pos { color: #10b981; }
+    .rank-neg { color: #ef4444; }
+    .insights-empty { font-size: 12px; color: var(--color-text-muted); padding: 20px 0; text-align: center; }
+
     /* ── Main Layout ── */
     #main-layout {
       display: flex;
@@ -565,11 +692,25 @@
   <div class="toolbar-sep"></div>
 
   <div class="toolbar-group">
-    <label for="patient-select">Patient</label>
-    <select id="patient-select"></select>
+    <label for="patient-input">Patient</label>
+    <div class="combo" id="patient-combo">
+      <input type="text" id="patient-input" placeholder="Search patient…" autocomplete="off" spellcheck="false">
+      <div class="combo-list" id="patient-list-dd"></div>
+    </div>
   </div>
 
   <span id="patient-meta"></span>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <label for="xaxis-mode" title="How the horizontal axis is labelled">X-axis</label>
+    <select id="xaxis-mode">
+      <option value="date">Calendar date</option>
+      <option value="days">Days since first record</option>
+    </select>
+    <label class="chk-label" title="Mark the transplant date (when available)"><input type="checkbox" id="show-transplant"> Transplant marker</label>
+  </div>
 
   <div class="toolbar-sep"></div>
 
@@ -580,6 +721,12 @@
     <input type="date" id="date-to">
     <button id="btn-date-apply">Apply</button>
     <button id="btn-date-reset">Reset</button>
+  </div>
+
+  <div class="toolbar-sep"></div>
+
+  <div class="toolbar-group">
+    <button id="btn-insights" title="Correlation insights between tracks">◧ Insights</button>
   </div>
 
   <div class="toolbar-sep"></div>
@@ -641,6 +788,37 @@
   </main>
 </div>
 
+<!-- Insights modal -->
+<div id="insights-overlay">
+  <div id="insights-modal">
+    <div class="insights-head">
+      <h2>Correlation Insights <span id="insights-patient" class="insights-sub"></span></h2>
+      <div class="insights-controls">
+        <label class="chk-label" title="Pearson measures linear correlation; Spearman measures monotonic (rank) correlation">Method
+          <select id="insights-method">
+            <option value="pearson">Pearson</option>
+            <option value="spearman">Spearman</option>
+          </select>
+        </label>
+        <label class="chk-label" title="Minimum number of overlapping days required for a pair">Min overlap
+          <select id="insights-minn">
+            <option value="5">5</option>
+            <option value="8" selected>8</option>
+            <option value="12">12</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <button id="btn-insights-close" title="Close">&times;</button>
+      </div>
+    </div>
+    <p class="insights-note">Values are linearly interpolated onto a shared daily grid over each pair's overlapping window, then correlated. Correlation is not causation; pairs below the minimum overlap are skipped.</p>
+    <div id="insights-body">
+      <div id="insights-heatmap"></div>
+      <div id="insights-ranked"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -652,7 +830,7 @@
   // STATE
   // ═══════════════════════════════════════════════════════
   var STORAGE_KEY = "nir-lab-timeline-state";
-  var STORAGE_VERSION = 6;
+  var STORAGE_VERSION = 7;
   var MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
 
   var state = {
@@ -666,6 +844,8 @@
     overlayGroups: [],
     dateRange: { from: null, to: null },
     theme: "dark",
+    xAxisMode: "date",       // "date" | "days"
+    showTransplant: false,   // optional transplant marker
     // Runtime only (not persisted)
     bedGraphCache: {},
     uploadedTracks: [],
@@ -701,6 +881,19 @@
     var ref = new Date(refDate);
     var d = new Date(dateStr);
     return Math.round((d - ref) / 86400000);
+  }
+
+  // X value for a given day offset, honouring the current axis mode.
+  function xForDay(refDate, day) {
+    return state.xAxisMode === "days" ? day : dayToDate(refDate, day);
+  }
+
+  // Human-readable label for a day offset (used in hover tooltips).
+  function dayLabel(refDate, day) {
+    if (state.xAxisMode === "days") {
+      return "Day " + day + " (" + dayToDate(refDate, day) + ")";
+    }
+    return dayToDate(refDate, day) + " (Day " + day + ")";
   }
 
   function showToast(msg) {
@@ -793,6 +986,8 @@
         overlayGroups: state.overlayGroups,
         dateRange: state.dateRange,
         theme: state.theme,
+        xAxisMode: state.xAxisMode,
+        showTransplant: state.showTransplant,
         uploadedTracks: state.uploadedTracks,
         uploadedPatients: state.uploadedPatients
       };
@@ -822,6 +1017,8 @@
       if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
       if (data.dateRange) state.dateRange = data.dateRange;
       if (data.theme) state.theme = data.theme;
+      if (data.xAxisMode) state.xAxisMode = data.xAxisMode;
+      if (typeof data.showTransplant === "boolean") state.showTransplant = data.showTransplant;
       if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
       if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
       return true;
@@ -839,6 +1036,8 @@
       overlayGroups: state.overlayGroups,
       dateRange: state.dateRange,
       theme: state.theme,
+      xAxisMode: state.xAxisMode,
+      showTransplant: state.showTransplant,
       uploadedTracks: state.uploadedTracks,
       uploadedPatients: state.uploadedPatients
     };
@@ -865,6 +1064,8 @@
         if (data.overlayGroups) state.overlayGroups = data.overlayGroups;
         if (data.dateRange) state.dateRange = data.dateRange;
         if (data.theme) { state.theme = data.theme; applyTheme(); }
+        if (data.xAxisMode) state.xAxisMode = data.xAxisMode;
+        if (typeof data.showTransplant === "boolean") state.showTransplant = data.showTransplant;
         if (data.uploadedTracks) state.uploadedTracks = data.uploadedTracks;
         if (data.uploadedPatients) state.uploadedPatients = data.uploadedPatients;
         saveToLocalStorage();
@@ -981,37 +1182,184 @@
   // ═══════════════════════════════════════════════════════
   // UI: TOOLBAR
   // ═══════════════════════════════════════════════════════
-  function populatePatientDropdown() {
-    var sel = $("patient-select");
-    sel.innerHTML = "";
-    if (!state.config) return;
-
-    var allPatients = state.config.patients.slice();
-    // Add uploaded patients
+  // Sorted list of all patients (config + uploaded, de-duplicated).
+  function getAllPatientsSorted() {
+    var allPatients = state.config ? state.config.patients.slice() : [];
     state.uploadedPatients.forEach(function (p) {
-      // Check for collision
       var exists = false;
-      for (var i = 0; i < state.config.patients.length; i++) {
-        if (state.config.patients[i].id === p.id) { exists = true; break; }
+      for (var i = 0; i < allPatients.length; i++) {
+        if (allPatients[i].id === p.id) { exists = true; break; }
       }
       if (!exists) allPatients.push(p);
     });
-
     allPatients.sort(function (a, b) { return a.id.localeCompare(b.id); });
+    return allPatients;
+  }
 
-    allPatients.forEach(function (p) {
-      var opt = document.createElement("option");
-      opt.value = p.id;
-      var suffix = "";
-      // Check if uploaded
-      for (var j = 0; j < state.uploadedPatients.length; j++) {
-        if (state.uploadedPatients[j].id === p.id) { suffix = " (uploaded)"; break; }
+  var comboActiveIdx = -1;   // highlighted item in the open dropdown
+  var comboMatches = [];     // current filtered patient list
+
+  function isUploadedPatient(id) {
+    for (var j = 0; j < state.uploadedPatients.length; j++) {
+      if (state.uploadedPatients[j].id === id) return true;
+    }
+    return false;
+  }
+
+  function renderPatientDropdown(filter) {
+    var dd = $("patient-list-dd");
+    dd.innerHTML = "";
+    var f = (filter || "").trim().toLowerCase();
+    var all = getAllPatientsSorted();
+    comboMatches = f
+      ? all.filter(function (p) {
+          if (p.id.toLowerCase().indexOf(f) !== -1) return true;
+          var organ = p.metadata && p.metadata.organ ? p.metadata.organ.toLowerCase() : "";
+          return organ.indexOf(f) !== -1;
+        })
+      : all;
+
+    if (comboMatches.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "combo-empty";
+      empty.textContent = "No matching patients";
+      dd.appendChild(empty);
+      return;
+    }
+
+    var CAP = 200;
+    var shown = comboMatches.slice(0, CAP);
+    shown.forEach(function (p, i) {
+      var item = document.createElement("div");
+      item.className = "combo-item";
+      item.setAttribute("data-id", p.id);
+      if (i === comboActiveIdx) item.classList.add("active");
+
+      var idSpan = document.createElement("span");
+      idSpan.className = "ci-id";
+      // Highlight the matched substring
+      if (f && p.id.toLowerCase().indexOf(f) !== -1) {
+        var pos = p.id.toLowerCase().indexOf(f);
+        idSpan.innerHTML = escapeHtml(p.id.slice(0, pos)) + "<mark>" +
+          escapeHtml(p.id.slice(pos, pos + f.length)) + "</mark>" +
+          escapeHtml(p.id.slice(pos + f.length));
+      } else {
+        idSpan.textContent = p.id;
       }
-      opt.textContent = p.id + suffix;
-      sel.appendChild(opt);
+      item.appendChild(idSpan);
+
+      var metaBits = [];
+      if (p.metadata && p.metadata.organ) metaBits.push(p.metadata.organ);
+      if (isUploadedPatient(p.id)) metaBits.push("uploaded");
+      var metaSpan = document.createElement("span");
+      metaSpan.className = "ci-meta";
+      metaSpan.textContent = metaBits.join(" · ");
+      item.appendChild(metaSpan);
+
+      item.addEventListener("mousedown", function (e) {
+        e.preventDefault(); // keep focus / prevent blur before click
+        selectPatient(p.id);
+      });
+      dd.appendChild(item);
     });
 
-    if (state.selectedPatientId) sel.value = state.selectedPatientId;
+    if (comboMatches.length > CAP) {
+      var more = document.createElement("div");
+      more.className = "combo-more";
+      more.textContent = (comboMatches.length - CAP) + " more… keep typing to narrow";
+      dd.appendChild(more);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function openPatientDropdown() {
+    comboActiveIdx = -1;
+    renderPatientDropdown($("patient-input").value);
+    $("patient-list-dd").classList.add("open");
+  }
+
+  function closePatientDropdown() {
+    $("patient-list-dd").classList.remove("open");
+    comboActiveIdx = -1;
+  }
+
+  function selectPatient(id) {
+    if (!id) return;
+    state.selectedPatientId = id;
+    $("patient-input").value = id;
+    closePatientDropdown();
+    updatePatientInfo();
+    saveToLocalStorage();
+    rebuildSidebar();
+    renderChart();
+  }
+
+  // Keep the input in sync with the selected patient (used on load / import).
+  function populatePatientDropdown() {
+    if (state.selectedPatientId) $("patient-input").value = state.selectedPatientId;
+  }
+
+  function setupPatientSearch() {
+    var input = $("patient-input");
+    var dd = $("patient-list-dd");
+
+    input.addEventListener("focus", function () { openPatientDropdown(); });
+    input.addEventListener("input", function () {
+      comboActiveIdx = -1;
+      renderPatientDropdown(this.value);
+      dd.classList.add("open");
+    });
+    input.addEventListener("keydown", function (e) {
+      var items = dd.querySelectorAll(".combo-item");
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (!dd.classList.contains("open")) { openPatientDropdown(); return; }
+        comboActiveIdx = Math.min(comboActiveIdx + 1, items.length - 1);
+        updateComboActive(items);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        comboActiveIdx = Math.max(comboActiveIdx - 1, 0);
+        updateComboActive(items);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (comboActiveIdx >= 0 && items[comboActiveIdx]) {
+          selectPatient(items[comboActiveIdx].getAttribute("data-id"));
+        } else if (comboMatches.length === 1) {
+          selectPatient(comboMatches[0].id);
+        } else if (comboMatches.length > 0) {
+          selectPatient(comboMatches[0].id);
+        }
+      } else if (e.key === "Escape") {
+        closePatientDropdown();
+        input.value = state.selectedPatientId || "";
+        input.blur();
+      }
+    });
+
+    // Close when clicking outside the combo
+    document.addEventListener("click", function (e) {
+      if (!$("patient-combo").contains(e.target)) {
+        closePatientDropdown();
+        // Restore a valid id if the user typed garbage and clicked away
+        if (input.value !== state.selectedPatientId) {
+          input.value = state.selectedPatientId || "";
+        }
+      }
+    });
+  }
+
+  function updateComboActive(items) {
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle("active", i === comboActiveIdx);
+    }
+    if (comboActiveIdx >= 0 && items[comboActiveIdx]) {
+      items[comboActiveIdx].scrollIntoView({ block: "nearest" });
+    }
   }
 
   function updatePatientInfo() {
@@ -1035,6 +1383,10 @@
     // Date range
     if (state.dateRange.from) $("date-from").value = state.dateRange.from;
     if (state.dateRange.to) $("date-to").value = state.dateRange.to;
+    // X-axis mode + transplant marker + patient input
+    $("xaxis-mode").value = state.xAxisMode;
+    $("show-transplant").checked = !!state.showTransplant;
+    if (state.selectedPatientId) $("patient-input").value = state.selectedPatientId;
   }
 
   function applyTheme() {
@@ -1046,14 +1398,28 @@
   }
 
   function setupToolbarHandlers() {
-    // Patient change
-    $("patient-select").addEventListener("change", function () {
-      state.selectedPatientId = this.value;
-      updatePatientInfo();
+    // X-axis mode
+    $("xaxis-mode").addEventListener("change", function () {
+      state.xAxisMode = this.value;
       saveToLocalStorage();
-      rebuildSidebar();
       renderChart();
     });
+
+    // Transplant marker toggle
+    $("show-transplant").addEventListener("change", function () {
+      state.showTransplant = this.checked;
+      saveToLocalStorage();
+      renderChart();
+    });
+
+    // Insights
+    $("btn-insights").addEventListener("click", openInsights);
+    $("btn-insights-close").addEventListener("click", closeInsights);
+    $("insights-overlay").addEventListener("click", function (e) {
+      if (e.target === this) closeInsights();
+    });
+    $("insights-method").addEventListener("change", renderInsights);
+    $("insights-minn").addEventListener("change", renderInsights);
 
     // Date range
     $("btn-date-apply").addEventListener("click", function () {
@@ -1758,7 +2124,9 @@
     // Collect all enabled tracks
     var allTracks = getAllTracks();
     var enabledTracks = allTracks.filter(function (t) {
-      return state.trackEnabled[t.idx];
+      // Only render tracks that are enabled AND actually have data for this
+      // patient — avoids empty subplots when switching between patients.
+      return state.trackEnabled[t.idx] && trackHasDataForPatient(t, state.selectedPatientId);
     });
 
     if (enabledTracks.length === 0) {
@@ -1818,7 +2186,8 @@
         return getTrackByIdx(idx);
       }).filter(function (t) {
         if (!t) return false;
-        return state.trackEnabled[t.idx] || state.trackEnabled[String(t.idx)];
+        return (state.trackEnabled[t.idx] || state.trackEnabled[String(t.idx)]) &&
+               trackHasDataForPatient(t, state.selectedPatientId);
       });
       if (groupTracks.length > 0) {
         rows.push({ type: "overlay", tracks: groupTracks, height: 180 });
@@ -1925,19 +2294,29 @@
           borderwidth: 1,
           font: { size: 10, color: legendFont },
           x: 1, xanchor: "right",
-          y: domainTop, yanchor: "top"
+          y: domainTop, yanchor: "top",
+          tracegroupgap: 4
         };
 
-        var yTitle = row.tracks.map(function (t) { return getTrackName(t.idx, t.track); }).join(" / ");
+        // Decide whether tracks share a unit. If not, normalise each to 0..1
+        // so differently-scaled measurements are visually comparable.
+        var units = {};
+        row.tracks.forEach(function (t) { units[(t.track.unit || "").trim()] = 1; });
+        var sharedUnit = Object.keys(units).length === 1;
+        var normalize = !sharedUnit;
 
         row.tracks.forEach(function (t) {
           var pts = getTrackData(t, refDate);
           var color = getTrackColor(t.idx);
           var displayType = getTrackDisplayType(t.idx);
-          var trace = buildContinuousTrace(t, pts, color, displayType, xAxisName, yAxisName, refDate);
+          var trace = buildOverlayTrace(t, pts, color, displayType, xAxisName, yAxisName, refDate, normalize);
           trace.showlegend = true;
           traces.push(trace);
         });
+
+        var yTitle = normalize
+          ? "normalized 0–1"
+          : (row.tracks[0].track.unit || "value");
 
         layout[yAxisKey] = {
           domain: [Math.max(0, domainBottom), Math.min(1, domainTop)],
@@ -1947,6 +2326,7 @@
           tickfont: { size: 9, color: fontColor },
           zeroline: false
         };
+        if (normalize) { layout[yAxisKey].range = [-0.05, 1.05]; }
       } else if (row.type === "event") {
         row.tracks.forEach(function (t) {
           var pts = getTrackData(t, refDate);
@@ -1962,10 +2342,10 @@
         };
       }
 
-      // X axis for this row — use date type for calendar dates
-      var day0Date = patient.referenceDate;
+      // X axis for this row — calendar dates or day offsets from first record
+      var isDateMode = state.xAxisMode !== "days";
       layout[xAxisKey] = {
-        type: "date",
+        type: isDateMode ? "date" : "linear",
         color: fontColor,
         gridcolor: gridColor,
         tickfont: { size: 9, color: fontColor },
@@ -1976,7 +2356,7 @@
       // Only show x-axis title on bottom row
       if (rIdx === rows.length - 1) {
         layout[xAxisKey].title = {
-          text: "Date",
+          text: isDateMode ? "Date" : "Days since first record",
           font: { size: 11, color: fontColor }
         };
       }
@@ -1986,46 +2366,36 @@
         layout[xAxisKey].matches = "x";
       }
 
-      // Date range filter
-      if (state.dateRange.from || state.dateRange.to) {
+      // Date range filter (only meaningful on the calendar-date axis;
+      // in day mode the data itself is already filtered by filterByDateRange)
+      if (isDateMode && (state.dateRange.from || state.dateRange.to)) {
         if (axisCount === 1) {
           layout[xAxisKey].range = [state.dateRange.from || undefined, state.dateRange.to || undefined];
         }
       }
     });
 
-    // Add reference date annotation
-    var refDateStr = patient.referenceDate;
-    var annotBg = state.theme === "light" ? "rgba(255,255,255,0.9)" : "rgba(17,24,39,0.8)";
-    layout.annotations = [{
-      x: refDateStr,
-      y: 1,
-      xref: "x",
-      yref: "paper",
-      text: patient.referenceLabel || "Reference",
-      showarrow: true,
-      arrowhead: 0,
-      arrowcolor: "#f59e0b88",
-      ax: 0,
-      ay: -30,
-      font: { size: 10, color: "#f59e0b" },
-      bgcolor: annotBg,
-      bordercolor: "#f59e0b44",
-      borderwidth: 1,
-      borderpad: 3
-    }];
-
-    // Vertical line at reference date
-    layout.shapes = [{
-      type: "line",
-      x0: refDateStr,
-      x1: refDateStr,
-      y0: 0,
-      y1: 1,
-      xref: "x",
-      yref: "paper",
-      line: { color: "#f59e0b44", width: 1, dash: "dash" }
-    }];
+    // Optional transplant marker (only when the patient has a transplant date
+    // and the toggle is on). The x-axis itself is anchored at the first record.
+    layout.annotations = [];
+    layout.shapes = [];
+    if (state.showTransplant && patient.transplantDate) {
+      var tDay = dateToDay(refDate, patient.transplantDate);
+      var tX = state.xAxisMode === "days" ? tDay : patient.transplantDate;
+      var annotBg = state.theme === "light" ? "rgba(255,255,255,0.9)" : "rgba(17,24,39,0.8)";
+      layout.annotations.push({
+        x: tX, y: 1, xref: "x", yref: "paper",
+        text: "Transplant", showarrow: true, arrowhead: 0,
+        arrowcolor: "#f59e0b88", ax: 0, ay: -30,
+        font: { size: 10, color: "#f59e0b" },
+        bgcolor: annotBg, bordercolor: "#f59e0b44", borderwidth: 1, borderpad: 3
+      });
+      layout.shapes.push({
+        type: "line", x0: tX, x1: tX, y0: 0, y1: 1,
+        xref: "x", yref: "paper",
+        line: { color: "#f59e0b44", width: 1, dash: "dash" }
+      });
+    }
 
     loadingEl.style.display = "none";
 
@@ -2056,13 +2426,13 @@
   }
 
   function buildContinuousTrace(trackInfo, pts, color, displayType, xAxis, yAxis, refDate) {
-    var xVals = pts.map(function (p) { return dayToDate(refDate, p.day); });
+    var xVals = pts.map(function (p) { return xForDay(refDate, p.day); });
     var yVals = pts.map(function (p) { return p.value; });
 
     var displayName = getTrackName(trackInfo.idx, trackInfo.track);
     var hoverText = pts.map(function (p) {
       return "<b>" + displayName + "</b><br>" +
-        dayToDate(refDate, p.day) + " (Day " + p.day + ")<br>" +
+        dayLabel(refDate, p.day) + "<br>" +
         "Value: " + p.value.toFixed(2) +
         (trackInfo.track.unit ? " " + trackInfo.track.unit : "") +
         "<extra></extra>";
@@ -2108,13 +2478,53 @@
     return trace;
   }
 
+  // Overlay trace: like a continuous trace, but optionally min–max normalized
+  // so tracks with different units are visually comparable on a shared 0..1 axis.
+  function buildOverlayTrace(trackInfo, pts, color, displayType, xAxis, yAxis, refDate, normalize) {
+    if (!normalize) {
+      var t0 = buildContinuousTrace(trackInfo, pts, color, displayType, xAxis, yAxis, refDate);
+      return t0;
+    }
+    var vals = pts.map(function (p) { return p.value; });
+    var mn = Math.min.apply(null, vals);
+    var mx = Math.max.apply(null, vals);
+    var span = (mx - mn) || 1;
+    var displayName = getTrackName(trackInfo.idx, trackInfo.track);
+    var unit = trackInfo.track.unit ? " " + trackInfo.track.unit : "";
+    var xVals = pts.map(function (p) { return xForDay(refDate, p.day); });
+    var yVals = pts.map(function (p) { return (p.value - mn) / span; });
+    var hoverText = pts.map(function (p) {
+      return "<b>" + displayName + "</b><br>" +
+        dayLabel(refDate, p.day) + "<br>" +
+        "Value: " + p.value.toFixed(2) + unit +
+        "<extra></extra>";
+    });
+    var trace = {
+      name: displayName,
+      x: xVals, y: yVals,
+      hovertemplate: "%{text}", text: hoverText,
+      xaxis: xAxis, yaxis: yAxis, showlegend: false
+    };
+    if (displayType === "bar") {
+      trace.type = "bar"; trace.marker = { color: color, opacity: 0.6 };
+    } else if (displayType === "markers") {
+      trace.type = "scatter"; trace.mode = "markers"; trace.marker = { size: 6, color: color };
+    } else {
+      trace.type = "scatter"; trace.mode = "lines+markers";
+      trace.line = { color: color, width: 1.5, shape: (displayType === "step" ? "hv" : "linear") };
+      trace.marker = { size: 4, color: color };
+      if (displayType === "area") { trace.fill = "tozeroy"; trace.fillcolor = color + "22"; }
+    }
+    return trace;
+  }
+
   function buildEventTrace(trackInfo, pts, xAxis, yAxis, refDate) {
-    var xVals = pts.map(function (p) { return dayToDate(refDate, p.day); });
+    var xVals = pts.map(function (p) { return xForDay(refDate, p.day); });
 
     var displayName = getTrackName(trackInfo.idx, trackInfo.track);
     var hoverText = pts.map(function (p) {
       return "<b>" + displayName + "</b><br>" +
-        dayToDate(refDate, p.day) + " (Day " + p.day + ")" +
+        dayLabel(refDate, p.day) +
         "<extra></extra>";
     });
 
@@ -2139,6 +2549,230 @@
   }
 
   // ═══════════════════════════════════════════════════════
+  // CORRELATION INSIGHTS
+  // ═══════════════════════════════════════════════════════
+  function dedupeByDay(pts) {
+    // pts sorted by day; average values sharing the same day
+    var out = [];
+    var i = 0;
+    while (i < pts.length) {
+      var day = pts[i].day, sum = 0, cnt = 0;
+      while (i < pts.length && pts[i].day === day) { sum += pts[i].value; cnt++; i++; }
+      out.push({ day: day, value: sum / cnt });
+    }
+    return out;
+  }
+
+  function interpAt(pts, day) {
+    // linear interpolation; pts sorted, day within [first,last]
+    if (day <= pts[0].day) return pts[0].value;
+    var last = pts[pts.length - 1];
+    if (day >= last.day) return last.value;
+    for (var i = 1; i < pts.length; i++) {
+      if (pts[i].day >= day) {
+        var a = pts[i - 1], b = pts[i];
+        var frac = (day - a.day) / (b.day - a.day);
+        return a.value + frac * (b.value - a.value);
+      }
+    }
+    return last.value;
+  }
+
+  function pearson(xs, ys) {
+    var n = xs.length, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    for (var i = 0; i < n; i++) {
+      sx += xs[i]; sy += ys[i];
+      sxx += xs[i] * xs[i]; syy += ys[i] * ys[i]; sxy += xs[i] * ys[i];
+    }
+    var num = n * sxy - sx * sy;
+    var den = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+    if (den === 0) return null;
+    return num / den;
+  }
+
+  function toRanks(arr) {
+    var idx = arr.map(function (v, i) { return [v, i]; });
+    idx.sort(function (a, b) { return a[0] - b[0]; });
+    var ranks = new Array(arr.length);
+    var i = 0;
+    while (i < idx.length) {
+      var j = i;
+      while (j < idx.length && idx[j][0] === idx[i][0]) j++;
+      var avgRank = (i + j - 1) / 2 + 1; // average rank for ties
+      for (var k = i; k < j; k++) ranks[idx[k][1]] = avgRank;
+      i = j;
+    }
+    return ranks;
+  }
+
+  // Build the per-patient series for every continuous track that has data.
+  function collectPatientSeries() {
+    var refDate = getPatient(state.selectedPatientId) ? getPatient(state.selectedPatientId).referenceDate : null;
+    var series = [];
+    getAllTracks().forEach(function (t) {
+      var catType = "continuous";
+      if (state.config && state.config.categories[t.track.category]) {
+        catType = state.config.categories[t.track.category].type;
+      }
+      if (catType === "event") return;
+      var pts = getTrackData(t, refDate); // respects current date-range filter
+      if (!pts || pts.length < 2) return;
+      var clean = dedupeByDay(pts.slice().sort(function (a, b) { return a.day - b.day; }));
+      if (clean.length < 2) return;
+      series.push({
+        idx: t.idx,
+        name: getTrackName(t.idx, t.track),
+        unit: t.track.unit || "",
+        pts: clean,
+        minDay: clean[0].day,
+        maxDay: clean[clean.length - 1].day
+      });
+    });
+    return series;
+  }
+
+  function correlatePair(A, B, method, minN) {
+    var lo = Math.max(A.minDay, B.minDay);
+    var hi = Math.min(A.maxDay, B.maxDay);
+    if (hi <= lo) return null;
+    // sample at the union of real measurement days inside the overlap
+    var daySet = {};
+    A.pts.forEach(function (p) { if (p.day >= lo && p.day <= hi) daySet[p.day] = 1; });
+    B.pts.forEach(function (p) { if (p.day >= lo && p.day <= hi) daySet[p.day] = 1; });
+    var days = Object.keys(daySet).map(Number).sort(function (a, b) { return a - b; });
+    if (days.length < minN) return null;
+    var xs = days.map(function (d) { return interpAt(A.pts, d); });
+    var ys = days.map(function (d) { return interpAt(B.pts, d); });
+    if (method === "spearman") { xs = toRanks(xs); ys = toRanks(ys); }
+    var r = pearson(xs, ys);
+    if (r === null) return null;
+    return { r: r, n: days.length };
+  }
+
+  function openInsights() {
+    if (!state.selectedPatientId) { showToast("Select a patient first"); return; }
+    $("insights-patient").textContent = "· " + state.selectedPatientId;
+    $("insights-overlay").classList.add("open");
+    renderInsights();
+  }
+
+  function closeInsights() {
+    $("insights-overlay").classList.remove("open");
+    try { Plotly.purge($("insights-heatmap")); } catch (e) {}
+  }
+
+  function renderInsights() {
+    var method = $("insights-method").value;
+    var minN = parseInt($("insights-minn").value, 10) || 8;
+    var series = collectPatientSeries();
+    var heatEl = $("insights-heatmap");
+    var rankEl = $("insights-ranked");
+
+    if (series.length < 2) {
+      try { Plotly.purge(heatEl); } catch (e) {}
+      heatEl.innerHTML = "";
+      rankEl.innerHTML = "<div class='insights-empty'>This patient has fewer than two tracks with enough data to correlate. Enable more tracks or pick another patient.</div>";
+      return;
+    }
+
+    var names = series.map(function (s) { return s.name; });
+    var N = series.length;
+    var matrix = [];        // rows for heatmap (r values or null)
+    var pairs = [];         // flat list for ranking
+    for (var i = 0; i < N; i++) {
+      matrix.push(new Array(N).fill(null));
+    }
+    for (var a = 0; a < N; a++) {
+      matrix[a][a] = 1;
+      for (var b = a + 1; b < N; b++) {
+        var res = correlatePair(series[a], series[b], method, minN);
+        if (res) {
+          matrix[a][b] = res.r;
+          matrix[b][a] = res.r;
+          pairs.push({ a: names[a], b: names[b], r: res.r, n: res.n });
+        }
+      }
+    }
+
+    // Heatmap
+    var fontColor = getComputedStyle(document.body).getPropertyValue('--plotly-font-color').trim() || "#9ca3af";
+    var heatText = matrix.map(function (row) {
+      return row.map(function (v) { return v === null ? "" : v.toFixed(2); });
+    });
+    var heatData = [{
+      type: "heatmap",
+      z: matrix, x: names, y: names, text: heatText,
+      texttemplate: "%{text}", textfont: { size: 9 },
+      hovertemplate: "%{y} ↔ %{x}<br>r = %{z:.2f}<extra></extra>",
+      zmin: -1, zmax: 1, zmid: 0,
+      colorscale: [[0, "#ef4444"], [0.5, "#1a1d27"], [1, "#10b981"]],
+      xgap: 1, ygap: 1,
+      colorbar: { title: { text: "r", side: "right" }, thickness: 10, len: 0.8, tickfont: { size: 9, color: fontColor } }
+    }];
+    var cell = 30;
+    var heatLayout = {
+      paper_bgcolor: "transparent", plot_bgcolor: "transparent",
+      margin: { t: 10, r: 10, b: 120, l: 120 },
+      height: Math.max(220, N * cell + 140),
+      font: { family: "'IBM Plex Mono', monospace", color: fontColor, size: 9 },
+      xaxis: { tickangle: -45, automargin: true, side: "bottom", tickfont: { size: 9, color: fontColor } },
+      yaxis: { automargin: true, autorange: "reversed", tickfont: { size: 9, color: fontColor } }
+    };
+    Plotly.purge(heatEl);
+    Plotly.newPlot(heatEl, heatData, heatLayout, { displayModeBar: false, responsive: true });
+
+    // Ranked lists
+    rankEl.innerHTML = "";
+    if (pairs.length === 0) {
+      rankEl.innerHTML = "<div class='insights-empty'>No track pairs share at least " + minN + " overlapping measurement days. Lower the minimum overlap or widen the date range.</div>";
+      return;
+    }
+    var sorted = pairs.slice().sort(function (x, y) { return y.r - x.r; });
+    var pos = sorted.filter(function (p) { return p.r > 0; }).slice(0, 12);
+    var neg = sorted.filter(function (p) { return p.r < 0; }).sort(function (x, y) { return x.r - y.r; }).slice(0, 12);
+
+    rankEl.appendChild(buildRankBlock("Strongest positive correlations", pos, "rank-pos"));
+    rankEl.appendChild(buildRankBlock("Strongest negative correlations", neg, "rank-neg"));
+  }
+
+  function buildRankBlock(title, list, cls) {
+    var block = document.createElement("div");
+    block.className = "rank-block";
+    var h = document.createElement("h3");
+    h.textContent = title;
+    block.appendChild(h);
+    if (list.length === 0) {
+      var e = document.createElement("div");
+      e.className = "insights-empty";
+      e.textContent = "None found.";
+      block.appendChild(e);
+      return block;
+    }
+    var head = document.createElement("div");
+    head.className = "rank-row";
+    head.innerHTML = "<span class='rr-pair' style='color:var(--color-text-muted)'>Pair</span>" +
+      "<span class='rr-r' style='color:var(--color-text-muted)'>r</span>" +
+      "<span class='rr-n' style='color:var(--color-text-muted)'>n</span>";
+    block.appendChild(head);
+    list.forEach(function (p) {
+      var row = document.createElement("div");
+      row.className = "rank-row";
+      var pair = document.createElement("span");
+      pair.className = "rr-pair";
+      pair.textContent = p.a + "  ↔  " + p.b;
+      var r = document.createElement("span");
+      r.className = "rr-r " + cls;
+      r.textContent = (p.r > 0 ? "+" : "") + p.r.toFixed(2);
+      var n = document.createElement("span");
+      n.className = "rr-n";
+      n.textContent = p.n;
+      row.appendChild(pair); row.appendChild(r); row.appendChild(n);
+      block.appendChild(row);
+    });
+    return block;
+  }
+
+  // ═══════════════════════════════════════════════════════
   // BOOT
   // ═══════════════════════════════════════════════════════
   async function main() {
@@ -2157,6 +2791,7 @@
     updatePatientInfo();
     updateToolbarState();
     setupToolbarHandlers();
+    setupPatientSearch();
     setupDropZone();
 
     // Pre-fetch all bedGraph files so sidebar knows which tracks have data
